@@ -135,4 +135,4 @@ See [docs/hardware/wiring.md](docs/hardware/wiring.md) for the full pinout. Tap 
 
 ## License
 
-Pi-side code and docs: MIT. Firmware submodule: see [`firmware/LICENSE`](firmware/LICENSE).
+Pi-side code and docs: GPL-2.0. Firmware submodule: CC BY-NC-SA 4.0 (see [`firmware/LICENSE.md`](firmware/LICENSE.md)).
