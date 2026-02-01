@@ -1,0 +1,29 @@
+# Build artifacts
+output/
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+*.order
+*.symvers
+*.dtbo
+*.dfu
+.*.cmd
+.module-common.o
+.tmp_versions/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local-only files
+CLAUDE.md
+SESSION_NOTES.md
+PI_QUICKREF.md
+null/

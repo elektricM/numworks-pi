@@ -1,0 +1,80 @@
+/*
+ * Device Tree overlay for NumWorks SPI framebuffer (spifb)
+ *
+ * Instantiates the spifb driver on SPI0, CE0.
+ * Replaces the old spi_busnum_to_master() + spi_new_device() approach.
+ *
+ * Compile:
+ *   dtc -@ -I dts -O dtb -o numworks-spifb.dtbo numworks-spifb.dts
+ *
+ * Install:
+ *   sudo cp numworks-spifb.dtbo /boot/overlays/
+ *
+ * Enable in /boot/config.txt:
+ *   dtoverlay=numworks-spifb
+ *
+ * Optional parameters (with defaults):
+ *   dtoverlay=numworks-spifb,speed=70000000,width=320,height=240,vwidth=480,vheight=360,fps=60
+ *
+ * The virtual resolution (vwidth x vheight) is what the desktop renders at.
+ * The driver downscales to the physical resolution (width x height) for SPI.
+ * Examples:
+ *   vwidth=480,vheight=360   -> 1.5x (default, good balance)
+ *   vwidth=640,vheight=480   -> 2x (smaller UI, more content)
+ *   vwidth=320,vheight=240   -> 1x (native, large UI)
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	/* Ensure SPI0 is enabled */
+	fragment@0 {
+		target = <&spi0>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	/* Remove the default spidev on CE0 so spifb can claim it */
+	fragment@1 {
+		target = <&spidev0>;
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	/* Add our spifb device on SPI0, CE0 */
+	fragment@2 {
+		target = <&spi0>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			spifb: spifb@0 {
+				compatible = "numworks,spifb";
+				reg = <0>;	/* CE0 */
+				spi-max-frequency = <70000000>;
+
+				/* Display properties */
+				width = <320>;
+				height = <240>;
+				vwidth = <480>;
+				vheight = <360>;
+				fps = <60>;
+			};
+		};
+	};
+
+	/* Allow overriding parameters from config.txt */
+	__overrides__ {
+		speed = <&spifb>,"spi-max-frequency:0";
+		width = <&spifb>,"width:0";
+		height = <&spifb>,"height:0";
+		vwidth = <&spifb>,"vwidth:0";
+		vheight = <&spifb>,"vheight:0";
+		fps = <&spifb>,"fps:0";
+	};
+};

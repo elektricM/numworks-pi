@@ -1,0 +1,13 @@
+[Unit]
+Description=NumWorks keyboard input daemon
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/uinput-serial-keyboard/
+ExecStart=/home/pi/uinput-serial-keyboard/uinput
+User=root
+Group=root
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
