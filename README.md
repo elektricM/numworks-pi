@@ -21,7 +21,7 @@ Based on [zardam's original project](https://zardam.github.io/post/raspberrypi-n
 | **Device Tree overlay** | [`pi-linux/overlay/`](pi-linux/overlay/) | SPI device registration for the display driver |
 | **Keyboard daemon** | [`pi-linux/uinput-serial-keyboard/`](pi-linux/uinput-serial-keyboard/) | uinput daemon: UART key input + mouse mode, patched for Wayland |
 | **Pi config files** | [`pi-linux/config/`](pi-linux/config/) | Boot config, systemd service, keyboard layout |
-| **Documentation** | [`docs/`](docs/) | Architecture, wiring, setup guides, firmware reference |
+| **Documentation** | [`docs/`](docs/) | Architecture, setup guides, firmware reference |
 
 ## How It Works
 
@@ -96,15 +96,7 @@ sudo reboot
 
 ### 4. Wire & Test
 
-See [docs/hardware/wiring.md](docs/hardware/wiring.md) for the full pinout. Tap the RPi icon on the calculator to start.
-
-## Hardware Requirements
-
-- NumWorks N0100 calculator
-- Raspberry Pi Zero 2 W
-- MicroSD card (8GB+)
-- P-channel MOSFET (NTR1P02LT1 or similar) + 10k pull-up resistor
-- 30 AWG wire, soldering equipment
+See [zardam's original blog post](https://zardam.github.io/post/raspberrypi-numworks/) for wiring details and hardware requirements. Tap the RPi icon on the calculator to start.
 
 ## What's Different from zardam's Original
 
@@ -124,14 +116,11 @@ See [docs/hardware/wiring.md](docs/hardware/wiring.md) for the full pinout. Tap 
 
 - [Architecture](docs/architecture.md) — display pipeline, keyboard protocol, driver internals
 - [Getting Started](docs/getting-started.md) — full setup walkthrough
-- [Hardware Wiring](docs/hardware/wiring.md) — pin connections, MOSFET circuit
-- [Hardware Specs](docs/hardware/specs.md) — SPI/UART protocols, key bitmap
 - [Firmware Build Guide](docs/firmware/build-guide.md) — build, flash, build flags
 - [Firmware Porting Notes](docs/firmware/porting-notes.md) — differences from zardam's epsilon
 - [UART Fix](docs/firmware/uart-fix.md) — consoleuart + USART3 clock fix
 - [Trixie Setup](docs/pi-setup/trixie.md) — Wayland, DRM, keyboard layout
-- [Battery Upgrade](docs/hardware/battery-upgrade.md) — LiPo options, runtime estimates
-- [Case Modification](docs/hardware/case-modification.md) — fitting the Pi inside
+- [Hardware & Wiring (zardam's blog)](https://zardam.github.io/post/raspberrypi-numworks/) — original hardware guide
 
 ## Credits
 
