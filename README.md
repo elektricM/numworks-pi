@@ -1,5 +1,11 @@
 # NumWorks + Raspberry Pi
 
+[![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](LICENSE.md)
+[![Platform: Raspberry Pi](https://img.shields.io/badge/Platform-Raspberry_Pi_Zero_2W-c51a4a.svg)](https://www.raspberrypi.com/products/raspberry-pi-zero-2-w/)
+[![OS: Debian Trixie](https://img.shields.io/badge/OS-Debian_Trixie-a80030.svg)](https://www.debian.org/)
+[![Display: DRM/KMS](https://img.shields.io/badge/Display-DRM%2FKMS-green.svg)](pi-linux/drm-spifb/)
+[![Compositor: Wayland](https://img.shields.io/badge/Compositor-Wayland-yellow.svg)](docs/pi-setup/trixie.md)
+
 A Raspberry Pi Zero 2 W running Linux inside a NumWorks calculator. The calculator's display shows the Pi desktop via SPI, and the keyboard sends input via UART.
 
 Based on [zardam's original project](https://zardam.github.io/post/raspberrypi-numworks/) (2018), updated for modern Linux (Debian Trixie, Wayland, DRM/KMS).
