@@ -1,4 +1,4 @@
 [submodule "firmware"]
 	path = firmware
-	url = https://github.com/elektricM/Upsilon.git
+	url = https://github.com/elektricM/Upsilon-RPI.git
 	branch = rpi-integration
