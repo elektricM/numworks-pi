@@ -30,7 +30,7 @@ key keymap[NUM_KEYS] = {
   {"right",     {KEY_RIGHT,       KEY_RIGHT}},
   {"ok",        {BTN_LEFT,        BTN_LEFT}},
   {"back",      {BTN_RIGHT,       BTN_RIGHT}},
-  {"home"},     // not handled here
+  {"home",      {KEY_ESC,          KEY_ESC}},
   {"power"},    // toggle mouse mode
   {NULL},
   {NULL},
@@ -40,7 +40,7 @@ key keymap[NUM_KEYS] = {
   {"alpha",     {KEY_CAPSLOCK,    KEY_CAPSLOCK}},
   {"xnt"},      // Switch to first keymap
   {"var"},      // Switch to second keymap
-  {"toolbox",   {KEY_RIGHTALT,    KEY_RIGHTALT}},
+  {"toolbox",   {KEY_TAB,         KEY_TAB}},
   {"backspace", {KEY_BACKSPACE,   KEY_ESC}},
   {"A",         {KEY_A,           KEY_F1}},
   {"B",         {KEY_B,           KEY_F2}},
@@ -57,8 +57,8 @@ key keymap[NUM_KEYS] = {
   {"M 7",       {KEY_M,           KEY_7}},
   {"N 8",       {KEY_N,           KEY_8}},
   {"O 9",       {KEY_O,           KEY_9}},
-  {"P (",       {KEY_P,           KEY_5}},
-  {"Q )",       {KEY_Q,           KEY_MINUS}},
+  {"P (",       {KEY_P,           KEY_LEFTBRACE}},
+  {"Q )",       {KEY_Q,           KEY_RIGHTBRACE}},
   {NULL},
   {"R 4",       {KEY_R,           KEY_4}},
   {"S 5",       {KEY_S,           KEY_5}},
@@ -70,10 +70,10 @@ key keymap[NUM_KEYS] = {
   {"X 2",       {KEY_X,           KEY_2}},
   {"Y 3",       {KEY_Y,           KEY_3}},
   {"Z +",       {KEY_Z,           KEY_KPPLUS}},
-  {"space -",   {KEY_SPACE,       KEY_KPMINUS}},
+  {"space -",   {KEY_SPACE,       KEY_MINUS}},
   {NULL},
-  {"? 0",       {KEY_QUESTION,    KEY_0}},
-  {"! .",       {KEY_COMMA,       KEY_SEMICOLON}},
+  {"? 0",       {KEY_SLASH,       KEY_0}},
+  {"! .",       {KEY_DOT,         KEY_SEMICOLON}},
   {"x10^x",     {KEY_LEFTCTRL,    KEY_LEFTCTRL}},
   {"ans",       {KEY_LEFTALT,     KEY_LEFTALT}},
   {"exe",       {KEY_ENTER,       KEY_EQUAL}},
