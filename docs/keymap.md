@@ -16,7 +16,7 @@ Shift (calculator Shift key) modifies keys — shown as `key / Shift+key` where 
 
  ┌──────┐                                      ┌──────┐
  │ Home │                                       │Power │
- │ ESC  │                                       │MOUSE │
+ │  --  │  (intercepted by calc firmware)       │MOUSE │
  └──────┘                                      └──────┘
 
  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
@@ -67,7 +67,7 @@ Shift (calculator Shift key) modifies keys — shown as `key / Shift+key` where 
 
  ┌──────┐                                      ┌──────┐
  │ Home │                                       │Power │
- │ ESC  │                                       │MOUSE │
+ │  --  │  (intercepted by calc firmware)       │MOUSE │
  └──────┘                                      └──────┘
 
  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
@@ -141,7 +141,7 @@ All other keys behave the same as the active keyboard mode (xnt or var).
 | `=` | EXE key, mode 1 |
 | `*` | `×` key, mode 1 |
 | `TAB` | Toolbox key (any mode) |
-| `ESC` | Home key (any mode) or Backspace in mode 1 |
+| `ESC` | Backspace in mode 1 |
 | `-` | `-` key, mode 1 |
 | `+` | `+` key, mode 1 |
 | `!` | Shift + `1` key, mode 1 |
@@ -164,7 +164,6 @@ These require remapping additional keys or adding a third keymap mode.
 
 | Key | Original | New | Why |
 |-----|----------|-----|-----|
-| Home | unmapped | ESC | ESC accessible in both modes |
 | Toolbox | RALT | TAB | Tab completion in terminal |
 | `0` key, mode 0 | KEY_QUESTION | KEY_SLASH | `/` for paths, Shift = `?` |
 | `(` key, mode 1 | KEY_5 (bug) | KEY_LEFTBRACE | `[`, Shift = `{` |

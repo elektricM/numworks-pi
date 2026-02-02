@@ -30,7 +30,7 @@ key keymap[NUM_KEYS] = {
   {"right",     {KEY_RIGHT,       KEY_RIGHT}},
   {"ok",        {BTN_LEFT,        BTN_LEFT}},
   {"back",      {BTN_RIGHT,       BTN_RIGHT}},
-  {"home",      {KEY_ESC,          KEY_ESC}},
+  {"home"},     // firmware intercepts — never reaches daemon
   {"power"},    // toggle mouse mode
   {NULL},
   {NULL},
