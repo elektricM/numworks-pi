@@ -2,3 +2,6 @@
 	path = firmware
 	url = https://github.com/elektricM/Upsilon-RPI.git
 	branch = rpi-integration
+[submodule "hardware/nwpi"]
+	path = hardware/nwpi
+	url = https://github.com/elektricM/nwpi.git
