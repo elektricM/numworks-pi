@@ -48,7 +48,7 @@ The keyboard daemon reads UART hex-encoded key state, converts to Linux input ev
 ### 1. Clone
 
 ```bash
-git clone --recurse-submodules https://github.com/elektricM/numworks-rpi.git
+git clone --recurse-submodules https://github.com/elektricM/numworks-pi.git
 cd numworks-rpi
 ```
 
