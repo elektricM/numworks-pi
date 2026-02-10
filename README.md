@@ -49,7 +49,7 @@ The keyboard daemon reads UART hex-encoded key state, converts to Linux input ev
 
 ```bash
 git clone --recurse-submodules https://github.com/elektricM/numworks-pi.git
-cd numworks-rpi
+cd numworks-pi
 ```
 
 ### 2. Build & Flash Firmware (on your computer)
@@ -115,12 +115,15 @@ See [zardam's original blog post](https://zardam.github.io/post/raspberrypi-numw
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) — display pipeline, keyboard protocol, driver internals
+- [Architecture](docs/architecture.md) — display pipeline, power design, keyboard protocol, driver internals
 - [Getting Started](docs/getting-started.md) — full setup walkthrough
+- [Keyboard Map](docs/keymap.md) — full key mapping reference (modes, mouse, special characters)
+- [Running Doom](docs/doom.md) — Chocolate Doom setup and controls
 - [Firmware Build Guide](docs/firmware/build-guide.md) — build, flash, build flags
 - [Firmware Porting Notes](docs/firmware/porting-notes.md) — differences from zardam's epsilon
 - [UART Fix](docs/firmware/uart-fix.md) — consoleuart + USART3 clock fix
-- [Trixie Setup](docs/pi-setup/trixie.md) — Wayland, DRM, keyboard layout
+- [Pi Setup (Trixie)](docs/pi-setup/trixie.md) — Wayland, DRM, keyboard layout
+- [Pi Setup Checklist](docs/pi-setup/checklist.md) — quick reference for fresh SD card
 - [Hardware & Wiring (zardam's blog)](https://zardam.github.io/post/raspberrypi-numworks/) — original hardware guide
 
 ## Credits
