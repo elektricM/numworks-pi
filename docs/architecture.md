@@ -170,6 +170,44 @@ A DRM tiny driver following the `repaper.c` pattern:
 
 **Fix**: Added virtual resolution support. Driver advertises configurable larger resolution to compositor (default 480x360), downscales to 320x240 with nearest-neighbor before SPI transfer. Configurable via DT overlay `vwidth`/`vheight` parameters.
 
+## Power Architecture
+
+### Hardware
+
+The Pi is powered via PB9 on the STM32, which controls an SX1308 boost converter on the custom NWPi PCB. The PCB has a 10k pull-down resistor on the enable pin.
+
+| State | PB9 | SX1308 | Pi |
+|---|---|---|---|
+| **Power ON** | Output HIGH | Enabled (boost active) | 5V supplied |
+| **Power OFF** | Output LOW | Disabled (pull-down holds EN low) | No power |
+
+### Firmware Behavior (from `rpi.cpp`)
+
+- **App launch** (`setOn()`): PB9 set to Output mode, driven HIGH. SX1308 enables, Pi boots. EXTI display bridge enabled.
+- **HOME key exit** (`transferControl()` returns): Only calls `disableDisplay()` — masks EXTI interrupt, deasserts SPI slave select. **Pi stays powered.** User can re-enter the app and resume their session.
+- **Calculator shutdown** (`setOff()`): PB9 driven LOW. SX1308 disables. **Hard power cut** — no graceful Linux shutdown. Use a read-only rootfs on the SD card to avoid corruption.
+- **Board init** (`init()`): Calls `setOff()` first (Pi starts unpowered), then configures SPI1 as slave with DMA, sets up EXTI on PA6 (chip select).
+- **Board shutdown** (`shutdown()`): Calls `setOff()`, disables NVIC/DMA/SPI, sets SPI GPIOs to analog.
+
+### Auto-Sleep Inhibition
+
+While the Pi is powered (`Ion::Rpi::isPowered()` returns true), two timers are suppressed:
+
+- **`SuspendTimer`** (55s idle → STM32 Stop mode): Skipped. Without this, Stop mode would set GPIOs to high-impedance, killing the SX1308 enable signal.
+- **`BacklightDimmingTimer`** (45s idle → screen dim): Skipped. Keeps the display bright while viewing the Pi desktop.
+
+Both check `isPowered()` at the top of their `fire()` method and return early if true.
+
+### Differences from zardam's Original Power Design
+
+| | zardam (2018) | This project (NWPi PCB) |
+|---|---|---|
+| Converter | None (battery direct to Pi 5V pin) | SX1308 boost (3.7V → 5V) |
+| MOSFET | P-channel (NTR1P02LT1) + 10k pull-up | SX1308 EN pin + 10k pull-down |
+| Power ON | PB9 Output LOW (MOSFET gate) | PB9 Output HIGH (SX1308 EN) |
+| Power OFF | PB9 Analog (pull-up → gate HIGH → MOSFET off) | PB9 Output LOW (pull-down holds EN low) |
+| Auto-sleep | Not handled (Pi killed by Stop mode) | Inhibited via `isPowered()` checks |
+
 ## Keyboard / UART Architecture
 
 ```
