@@ -3,8 +3,7 @@ Description=NumWorks keyboard input daemon
 
 [Service]
 Type=simple
-WorkingDirectory=/home/pi/uinput-serial-keyboard/
-ExecStart=/home/pi/uinput-serial-keyboard/uinput
+ExecStart=/usr/local/bin/nwinput /dev/ttyS0
 User=root
 Group=root
 Restart=on-failure

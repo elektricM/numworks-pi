@@ -13,8 +13,10 @@ dtparam=audio=on
 # Additional overlays and parameters are documented
 # /boot/firmware/overlays/README
 
-# Automatically load overlays for detected cameras
-camera_auto_detect=1
+# Camera (see docs/camera.md)
+# Use camera_auto_detect=1 for supported cameras (e.g. OV5647)
+# Use a manual dtoverlay for others (e.g. OV9281)
+camera_auto_detect=0
 
 # Automatically load overlays for detected DSI displays
 display_auto_detect=1

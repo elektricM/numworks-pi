@@ -27,13 +27,7 @@
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fb_dma_helper.h>
-#if __has_include(<drm/drm_fbdev_dma.h>)
 #include <drm/drm_fbdev_dma.h>
-#define HAS_FBDEV_DMA 1
-#else
-#include <drm/drm_fb_helper.h>
-#define HAS_FBDEV_DMA 0
-#endif
 #include <drm/drm_format_helper.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
@@ -329,9 +323,7 @@ static const struct drm_driver nw_spifb_drm_driver = {
 	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC,
 	.fops			= &nw_spifb_fops,
 	DRM_GEM_DMA_DRIVER_OPS_VMAP,
-#if HAS_FBDEV_DMA
 	DRM_FBDEV_DMA_DRIVER_OPS,
-#endif
 	.name			= DRIVER_NAME,
 	.desc			= DRIVER_DESC,
 	.major			= 1,
@@ -423,11 +415,7 @@ static int nw_spifb_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, drm);
 
 	/* fbdev emulation — provides /dev/fb0 for legacy console/apps */
-#if HAS_FBDEV_DMA
 	drm_fbdev_dma_setup(drm, 16);
-#else
-	drm_fbdev_generic_setup(drm, 16);
-#endif
 
 	dev_info(dev, "NumWorks SPI display: %ux%u (virtual %ux%u) @ SPI max %u Hz\n",
 		 nw->width, nw->height, nw->vwidth, nw->vheight,

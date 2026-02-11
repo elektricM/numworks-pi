@@ -14,7 +14,7 @@
  *   dtoverlay=numworks-spifb
  *
  * Optional parameters (with defaults):
- *   dtoverlay=numworks-spifb,speed=70000000,width=320,height=240,vwidth=480,vheight=360,fps=60
+ *   dtoverlay=numworks-spifb,speed=70000000,width=320,height=240,vwidth=480,vheight=360
  *
  * The virtual resolution (vwidth x vheight) is what the desktop renders at.
  * The driver downscales to the physical resolution (width x height) for SPI.
@@ -63,7 +63,6 @@
 				height = <240>;
 				vwidth = <480>;
 				vheight = <360>;
-				fps = <60>;
 			};
 		};
 	};
@@ -75,6 +74,5 @@
 		height = <&spifb>,"height:0";
 		vwidth = <&spifb>,"vwidth:0";
 		vheight = <&spifb>,"vheight:0";
-		fps = <&spifb>,"fps:0";
 	};
 };

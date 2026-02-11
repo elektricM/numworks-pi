@@ -15,8 +15,13 @@
 
 #define NUM_KEYS 53
 #define NUM_MODES 2
-#define MOUSE_SPEED 2
-#define MOUSE_INTERVAL_MS 20  /* ~50 Hz mouse update rate */
+#define MOUSE_INTERVAL_MS 16  /* ~60 Hz mouse update rate */
+#define DEFAULT_TTY "/dev/ttyS0"
+
+/* Mouse acceleration: ramps from MIN to MAX speed over RAMP_MS */
+#define MOUSE_MIN_SPEED 1
+#define MOUSE_MAX_SPEED 12
+#define MOUSE_RAMP_MS 600
 
 typedef struct {
   char *name;
@@ -82,6 +87,8 @@ key keymap[NUM_KEYS] = {
 int fd = -1;
 int mouse_mode = 0;
 u_int64_t current_scan = 0;
+struct timespec mouse_start;  /* when arrows were first held */
+int mouse_active = 0;         /* arrows currently held */
 
 void emit(int type, int code, int val)
 {
@@ -96,14 +103,12 @@ void emit(int type, int code, int val)
 
 void sig_handler(int signo)
 {
-  if (signo == SIGINT) {
-    printf("received SIGINT\n");
-    if(fd != -1) {
-      ioctl(fd, UI_DEV_DESTROY);
-      close(fd);
-    }
-    exit(0);
+  fprintf(stderr, "received signal %d, cleaning up\n", signo);
+  if(fd != -1) {
+    ioctl(fd, UI_DEV_DESTROY);
+    close(fd);
   }
+  exit(0);
 }
 
 void input_setup(void)
@@ -139,83 +144,114 @@ void input_setup(void)
    ioctl(fd, UI_SET_RELBIT, REL_Y);
 
    memset(&usetup, 0, sizeof(usetup));
-   usetup.id.bustype = BUS_USB;
-   usetup.id.vendor = 0x1234;
-   usetup.id.product = 0x5678;
-   strcpy(usetup.name, "NW Keyboard");
+   usetup.id.bustype = BUS_VIRTUAL;
+   usetup.id.vendor = 0x0000;
+   usetup.id.product = 0x0000;
+   snprintf(usetup.name, sizeof(usetup.name), "NW Keyboard");
 
-   ioctl(fd, UI_DEV_SETUP, &usetup);
-   ioctl(fd, UI_DEV_CREATE);
+   if (ioctl(fd, UI_DEV_SETUP, &usetup) < 0) {
+     perror("ioctl UI_DEV_SETUP");
+     exit(1);
+   }
+   if (ioctl(fd, UI_DEV_CREATE) < 0) {
+     perror("ioctl UI_DEV_CREATE");
+     exit(1);
+   }
+}
+
+/* Compute mouse speed based on how long arrows have been held */
+static int mouse_speed(void)
+{
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  long held_ms = (now.tv_sec - mouse_start.tv_sec) * 1000
+               + (now.tv_nsec - mouse_start.tv_nsec) / 1000000;
+  if (held_ms < 0) held_ms = 0;
+  if (held_ms > MOUSE_RAMP_MS) held_ms = MOUSE_RAMP_MS;
+  return MOUSE_MIN_SPEED + (MOUSE_MAX_SPEED - MOUSE_MIN_SPEED) * held_ms / MOUSE_RAMP_MS;
 }
 
 /* Emit mouse movement for any arrow keys currently held */
 void emit_mouse_movement(void)
 {
+  int arrows = current_scan & 0xF;
+  if (!arrows) {
+    mouse_active = 0;
+    return;
+  }
+  if (!mouse_active) {
+    clock_gettime(CLOCK_MONOTONIC, &mouse_start);
+    mouse_active = 1;
+  }
+  int speed = mouse_speed();
   int moved = 0;
-  if(current_scan & (1ULL<<0)) { emit(EV_REL, REL_X, -MOUSE_SPEED); moved = 1; }
-  if(current_scan & (1ULL<<1)) { emit(EV_REL, REL_Y, -MOUSE_SPEED); moved = 1; }
-  if(current_scan & (1ULL<<2)) { emit(EV_REL, REL_Y,  MOUSE_SPEED); moved = 1; }
-  if(current_scan & (1ULL<<3)) { emit(EV_REL, REL_X,  MOUSE_SPEED); moved = 1; }
-  if(moved) emit(EV_SYN, SYN_REPORT, 0);
+  if (arrows & (1<<0)) { emit(EV_REL, REL_X, -speed); moved = 1; }
+  if (arrows & (1<<1)) { emit(EV_REL, REL_Y, -speed); moved = 1; }
+  if (arrows & (1<<2)) { emit(EV_REL, REL_Y,  speed); moved = 1; }
+  if (arrows & (1<<3)) { emit(EV_REL, REL_X,  speed); moved = 1; }
+  if (moved) emit(EV_SYN, SYN_REPORT, 0);
 }
 
 void process(u_int64_t scan) {
   static u_int64_t old_scan = 0;
   static int mode = 0;
-  int index;
   u_int64_t changed = old_scan ^ scan;
-  u_int64_t mask;
+
+  if (!changed) goto done;
 
   /* Toggle mouse mode on power button (bit 7) press */
-  if((changed & (1ULL<<7)) && (scan & (1ULL<<7))) {
+  if ((changed & (1ULL<<7)) && (scan & (1ULL<<7))) {
     mouse_mode = !mouse_mode;
-    printf("Mouse mode: %s\n", mouse_mode ? "ON" : "OFF");
+    mouse_active = 0;
+    fprintf(stderr, "Mouse mode: %s\n", mouse_mode ? "ON" : "OFF");
   }
 
   /* Switch keymap mode */
-  if(scan & (1ULL<<14))
+  if (scan & (1ULL<<14))
     mode = 0;
-  else if(scan & (1ULL<<15))
+  else if (scan & (1ULL<<15))
     mode = 1;
 
-  if(mouse_mode) {
-    /* Arrow keys (bits 0-3): handled by emit_mouse_movement() on timer */
-    /* Handle non-arrow key changes normally */
-    for(index = 4; index < NUM_KEYS; index++) {
-      if(index == 7) continue;
-      mask = 1ULL << index;
-      if(keymap[index].code[mode] != 0 && (changed & mask))
-        emit(EV_KEY, keymap[index].code[mode], (scan & mask) ? 1 : 0);
-    }
-    if(changed & ~0xFULL)
-      emit(EV_SYN, SYN_REPORT, 0);
-  } else {
-    /* Keyboard mode: all keys as normal */
-    for(index = 0; index < NUM_KEYS; index++) {
-      if(index == 7) continue;
-      mask = 1ULL << index;
-      if(keymap[index].code[mode] != 0 && (changed & mask))
-        emit(EV_KEY, keymap[index].code[mode], (scan & mask) ? 1 : 0);
-    }
-    emit(EV_SYN, SYN_REPORT, 0);
+  /* In mouse mode, skip arrow bits (0-3) — handled by emit_mouse_movement() */
+  u_int64_t key_changes = mouse_mode ? (changed & ~0xFULL) : changed;
+  int emitted = 0;
+
+  /* Iterate only over changed bits */
+  while (key_changes) {
+    int bit = __builtin_ctzll(key_changes);
+    key_changes &= key_changes - 1;  /* clear lowest set bit */
+
+    if (bit == 7 || bit >= NUM_KEYS) continue;
+    if (keymap[bit].code[mode] == 0) continue;
+
+    emit(EV_KEY, keymap[bit].code[mode], (scan & (1ULL << bit)) ? 1 : 0);
+    emitted = 1;
   }
 
+  if (emitted)
+    emit(EV_SYN, SYN_REPORT, 0);
+
+  /* Reset acceleration when arrows are released in mouse mode */
+  if (mouse_mode && (changed & 0xF) && !(scan & 0xF))
+    mouse_active = 0;
+
+done:
   current_scan = scan;
   old_scan = scan;
 }
 
-void serial_loop() {
+void serial_loop(const char *tty_path) {
   struct termios tty;
-  int tty_fd = open("/dev/ttyS0", O_RDWR | O_NOCTTY);
+  int tty_fd = open(tty_path, O_RDWR | O_NOCTTY);
 
   if (tty_fd < 0) {
-    printf("Error %d opening tty: %s\n", errno, strerror(errno));
+    fprintf(stderr, "Error opening %s: %s\n", tty_path, strerror(errno));
     exit(1);
   }
 
   memset(&tty, 0, sizeof(tty));
   if(tcgetattr(tty_fd, &tty) != 0) {
-    printf("Error %d from tcgetattr: %s\n", errno, strerror(errno));
+    fprintf(stderr, "Error from tcgetattr: %s\n", strerror(errno));
     exit(1);
   }
 
@@ -233,7 +269,7 @@ void serial_loop() {
   tcflush(tty_fd, TCIFLUSH);
 
   if(tcsetattr(tty_fd, TCSANOW, &tty) != 0) {
-    printf("Error %d from tcsetattr: %s\n", errno, strerror(errno));
+    fprintf(stderr, "Error from tcsetattr: %s\n", strerror(errno));
     exit(1);
   }
 
@@ -257,7 +293,7 @@ void serial_loop() {
       char buf[256];
       int n = read(tty_fd, buf, sizeof(buf));
       if(n <= 0) {
-        printf("Read error\n");
+        fprintf(stderr, "Read error: %s\n", strerror(errno));
         exit(1);
       }
       for(int i = 0; i < n; i++) {
@@ -281,13 +317,18 @@ void serial_loop() {
   }
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
-   if (signal(SIGINT, sig_handler) == SIG_ERR) {
-     printf("can't catch SIGINT\n");
+   const char *tty_path = (argc > 1) ? argv[1] : DEFAULT_TTY;
+
+   if (signal(SIGINT, sig_handler) == SIG_ERR ||
+       signal(SIGTERM, sig_handler) == SIG_ERR) {
+     fprintf(stderr, "Failed to register signal handlers\n");
      exit(1);
    }
+
+   fprintf(stderr, "Starting nwinput on %s\n", tty_path);
    input_setup();
-   serial_loop();
+   serial_loop(tty_path);
    return 0;
 }
