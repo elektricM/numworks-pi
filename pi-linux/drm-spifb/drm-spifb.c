@@ -147,6 +147,7 @@ static void nw_spifb_send_frame(struct nw_spifb *nw,
 		/* Scaled mode: downscale + format convert */
 		switch (fb->format->format) {
 		case DRM_FORMAT_XRGB8888:
+		case DRM_FORMAT_ARGB8888:
 			nw_spifb_scale_xrgb8888(nw, src, fb);
 			break;
 		case DRM_FORMAT_RGB565:
@@ -168,6 +169,7 @@ static void nw_spifb_send_frame(struct nw_spifb *nw,
 				    fmtcnv_state);
 			break;
 		case DRM_FORMAT_XRGB8888:
+		case DRM_FORMAT_ARGB8888:
 			drm_fb_xrgb8888_to_rgb565(&dst, NULL, src, fb, &clip,
 						  fmtcnv_state, true);
 			break;
@@ -334,7 +336,8 @@ static const struct drm_driver nw_spifb_drm_driver = {
 
 static const u32 nw_spifb_formats[] = {
 	DRM_FORMAT_RGB565,
-	DRM_FORMAT_XRGB8888, /* KMS will convert to RGB565 for us */
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_ARGB8888,
 };
 
 static int nw_spifb_probe(struct spi_device *spi)
