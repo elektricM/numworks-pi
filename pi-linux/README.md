@@ -51,7 +51,7 @@ config/                    Pi config file copies (for reference/restore)
   nwinput.service          systemd service for keyboard daemon
   keyboard                 /etc/default/keyboard (US QWERTY)
   labwc-environment        Wayland compositor keyboard layout
-  modprobe-numworks.conf   spifb blacklist
+  modules-load.d-numworks.conf  /etc/modules-load.d/numworks.conf
 scripts/
   build.sh                 Build the driver
   install-overlay.sh       Compile and install the DT overlay
@@ -76,8 +76,10 @@ sudo depmod -a
 
 # 3. Build and install the keyboard daemon
 cd ../uinput-serial-keyboard
-gcc uinput.c -o uinput
+gcc uinput.c -o nwinput
+sudo cp nwinput /usr/local/bin/
 sudo cp ../config/nwinput.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl enable nwinput
 
 # 4. Configure
@@ -85,7 +87,8 @@ sudo systemctl enable nwinput
 #     dtparam=spi=on
 #     dtoverlay=numworks-spifb
 #   Remove console=serial0,115200 from /boot/firmware/cmdline.txt
-#   Add 'uinput' to /etc/modules
+#   Load required modules:
+#     sudo cp config/modules-load.d-numworks.conf /etc/modules-load.d/numworks.conf
 #   Set keyboard layout to US in ~/.config/labwc/environment:
 #     XKB_DEFAULT_LAYOUT=us
 
