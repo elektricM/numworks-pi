@@ -23,6 +23,8 @@ Chocolate Doom segfaults with GPU rendering on the DRM/SPI display. Three workar
 2. **Unset DISPLAY**: When launched from the desktop, `DISPLAY=:1` (XWayland) causes SDL to render a transparent window. Must `unset DISPLAY` to force pure Wayland.
 3. **setsid**: Launch via `setsid` to create a new session, otherwise the window renders transparently.
 
+> **Note**: With `WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128` set (see [XWayland fix](debugging/xwayland-transparency.md)), workarounds 2 and 3 may no longer be needed. Workaround 1 (software rendering) is still required for the Doom segfault.
+
 ## labwc Fullscreen Rule
 
 Chocolate Doom's built-in fullscreen doesn't work on the custom DRM display. Add a labwc window rule instead.
