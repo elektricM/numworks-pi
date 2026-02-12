@@ -105,11 +105,13 @@ rpicam-still -o photo.jpg --width 1280 --height 800 --nopreview
 
 ### Preview on the calculator display
 
-The rpicam EGL preview requires `DISPLAY=:0` (XWayland). From SSH:
+The rpicam EGL preview renders via XWayland. From SSH:
 
 ```bash
 DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 rpicam-hello -t 0
 ```
+
+This requires `WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128` in the labwc environment so that the vc4 GPU is the render device for DRI3/linux-dmabuf (see [XWayland fix](debugging/xwayland-transparency.md)).
 
 ### Remote streaming to another machine
 

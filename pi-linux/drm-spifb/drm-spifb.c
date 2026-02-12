@@ -11,12 +11,16 @@
  *   - Works with Wayland, X11, and fbcon
  *   - Proper modern Linux graphics stack
  *
+ * Uses async SPI with double buffering: CPU scales frame N+1 into one
+ * buffer while SPI DMA sends frame N from the other. This overlaps
+ * CPU and SPI work, achieving the SPI bus speed limit (~50 FPS).
+ *
  * Inspired by zardam's SPI display concept.
  * Based on drivers/gpu/drm/tiny/repaper.c skeleton pattern.
  */
 
+#include <linux/completion.h>
 #include <linux/delay.h>
-#include <linux/dma-mapping.h>
 #include <linux/iosys-map.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -46,6 +50,7 @@
  * 32768 bytes per chunk, matching the BCM2835 DMA limit.
  */
 #define SPI_CHUNK_SIZE	32768
+#define MAX_SPI_XFERS	5
 
 struct nw_spifb {
 	struct drm_device drm;
@@ -58,10 +63,12 @@ struct nw_spifb {
 	u32 vwidth;		/* Virtual (compositor) width */
 	u32 vheight;		/* Virtual (compositor) height */
 
-	/* DMA-coherent buffer for SPI transfers (byte-swapped copy) */
-	void *tx_buf;
-	dma_addr_t tx_dma;
-	size_t tx_size;
+	/* Double-buffered async SPI */
+	void *tx_buf[2];
+	int tx_write;			/* Buffer index CPU writes to next */
+	struct spi_message tx_msg;
+	struct spi_transfer tx_xfers[MAX_SPI_XFERS];
+	struct completion tx_done;	/* Signals SPI transfer complete */
 };
 
 static inline struct nw_spifb *drm_to_nw(struct drm_device *drm)
@@ -75,9 +82,9 @@ static inline struct nw_spifb *drm_to_nw(struct drm_device *drm)
  */
 static void nw_spifb_scale_xrgb8888(struct nw_spifb *nw,
 				     const struct iosys_map *src,
-				     const struct drm_framebuffer *fb)
+				     const struct drm_framebuffer *fb,
+				     u16 *tx)
 {
-	u16 *tx = nw->tx_buf;
 	u32 src_pitch = fb->pitches[0];
 	const u8 *src_base = src->vaddr;
 	u32 w = nw->width, h = nw->height;
@@ -105,9 +112,9 @@ static void nw_spifb_scale_xrgb8888(struct nw_spifb *nw,
  */
 static void nw_spifb_scale_rgb565(struct nw_spifb *nw,
 				   const struct iosys_map *src,
-				   const struct drm_framebuffer *fb)
+				   const struct drm_framebuffer *fb,
+				   u16 *tx)
 {
-	u16 *tx = nw->tx_buf;
 	u32 src_pitch = fb->pitches[0];
 	const u8 *src_base = src->vaddr;
 	u32 w = nw->width, h = nw->height;
@@ -125,33 +132,25 @@ static void nw_spifb_scale_rgb565(struct nw_spifb *nw,
 }
 
 /*
- * Convert framebuffer data to big-endian RGB565 in the TX buffer,
- * then send over SPI in 32KB chunks.
- *
- * The STM32 SPI slave expects raw big-endian RGB565 pixels.
- * The compositor renders at (width*scale)x(height*scale) and we
- * downscale to width x height before sending.
+ * Prepare a frame: scale/convert the compositor framebuffer into the
+ * current write-side TX buffer. CPU work only, no SPI.
  */
-static void nw_spifb_send_frame(struct nw_spifb *nw,
-				const struct iosys_map *src,
-				const struct drm_framebuffer *fb,
-				struct drm_format_conv_state *fmtcnv_state)
+static void nw_spifb_prepare_frame(struct nw_spifb *nw,
+				    const struct iosys_map *src,
+				    const struct drm_framebuffer *fb,
+				    struct drm_format_conv_state *fmtcnv_state)
 {
-	size_t frame_size = nw->width * nw->height * 2; /* RGB565 output */
-	struct spi_message msg;
-	struct spi_transfer xfers[5];
-	size_t remaining, offset;
-	int n_xfers;
+	u16 *tx = nw->tx_buf[nw->tx_write];
 
 	if (nw->vwidth != nw->width || nw->vheight != nw->height) {
 		/* Scaled mode: downscale + format convert */
 		switch (fb->format->format) {
 		case DRM_FORMAT_XRGB8888:
 		case DRM_FORMAT_ARGB8888:
-			nw_spifb_scale_xrgb8888(nw, src, fb);
+			nw_spifb_scale_xrgb8888(nw, src, fb, tx);
 			break;
 		case DRM_FORMAT_RGB565:
-			nw_spifb_scale_rgb565(nw, src, fb);
+			nw_spifb_scale_rgb565(nw, src, fb, tx);
 			break;
 		default:
 			return;
@@ -161,7 +160,7 @@ static void nw_spifb_send_frame(struct nw_spifb *nw,
 		struct iosys_map dst;
 		struct drm_rect clip = DRM_RECT_INIT(0, 0, nw->width, nw->height);
 
-		iosys_map_set_vaddr(&dst, nw->tx_buf);
+		iosys_map_set_vaddr(&dst, tx);
 
 		switch (fb->format->format) {
 		case DRM_FORMAT_RGB565:
@@ -177,28 +176,59 @@ static void nw_spifb_send_frame(struct nw_spifb *nw,
 			return;
 		}
 	}
+}
 
-	/* Split into chunks for SPI DMA */
-	spi_message_init(&msg);
-	memset(xfers, 0, sizeof(xfers));
+/* SPI async completion callback — runs in interrupt context */
+static void nw_spifb_spi_complete(void *context)
+{
+	struct nw_spifb *nw = context;
+
+	complete(&nw->tx_done);
+}
+
+/*
+ * Submit the current write buffer via async SPI, then flip to the
+ * other buffer for the next prepare. Waits for any in-flight transfer
+ * to complete first.
+ */
+static void nw_spifb_submit_frame(struct nw_spifb *nw)
+{
+	size_t frame_size = nw->width * nw->height * 2; /* RGB565 output */
+	void *buf = nw->tx_buf[nw->tx_write];
+	size_t remaining, offset;
+	int n_xfers;
+
+	/* Wait for previous async transfer to finish */
+	wait_for_completion(&nw->tx_done);
+	reinit_completion(&nw->tx_done);
+
+	/* Build SPI message with 32KB chunks */
+	spi_message_init(&nw->tx_msg);
+	memset(nw->tx_xfers, 0, sizeof(nw->tx_xfers));
 
 	remaining = frame_size;
 	offset = 0;
 	n_xfers = 0;
 
-	while (remaining > 0 && n_xfers < ARRAY_SIZE(xfers)) {
+	while (remaining > 0 && n_xfers < MAX_SPI_XFERS) {
 		size_t len = min_t(size_t, remaining, SPI_CHUNK_SIZE);
 
-		xfers[n_xfers].tx_buf = (u8 *)nw->tx_buf + offset;
-		xfers[n_xfers].len = len;
-		spi_message_add_tail(&xfers[n_xfers], &msg);
+		nw->tx_xfers[n_xfers].tx_buf = (u8 *)buf + offset;
+		nw->tx_xfers[n_xfers].len = len;
+		spi_message_add_tail(&nw->tx_xfers[n_xfers], &nw->tx_msg);
 
 		offset += len;
 		remaining -= len;
 		n_xfers++;
 	}
 
-	spi_sync(nw->spi, &msg);
+	nw->tx_msg.complete = nw_spifb_spi_complete;
+	nw->tx_msg.context = nw;
+
+	spi_async(nw->spi, &nw->tx_msg);
+
+	/* Flip to the other buffer for next frame's CPU work */
+	nw->tx_write ^= 1;
 }
 
 /* --- DRM simple display pipe callbacks --- */
@@ -224,13 +254,18 @@ static void nw_spifb_pipe_enable(struct drm_simple_display_pipe *pipe,
 		to_drm_shadow_plane_state(plane_state);
 
 	/* Send initial frame */
-	nw_spifb_send_frame(nw, &shadow->data[0], plane_state->fb,
-			    &shadow->fmtcnv_state);
+	nw_spifb_prepare_frame(nw, &shadow->data[0], plane_state->fb,
+			       &shadow->fmtcnv_state);
+	nw_spifb_submit_frame(nw);
 }
 
 static void nw_spifb_pipe_disable(struct drm_simple_display_pipe *pipe)
 {
-	/* Nothing to do — the STM32 handles display power */
+	struct nw_spifb *nw = drm_to_nw(pipe->crtc.dev);
+
+	/* Wait for any in-flight SPI transfer (1s timeout to avoid hanging shutdown) */
+	if (!wait_for_completion_timeout(&nw->tx_done, HZ))
+		dev_warn(&nw->spi->dev, "SPI transfer timeout on disable\n");
 }
 
 static void nw_spifb_pipe_update(struct drm_simple_display_pipe *pipe,
@@ -251,8 +286,9 @@ static void nw_spifb_pipe_update(struct drm_simple_display_pipe *pipe,
 		 * has no partial update mechanism — it expects a complete
 		 * 320x240 frame per CS assertion.
 		 */
-		nw_spifb_send_frame(nw, &shadow->data[0], state->fb,
-				    &shadow->fmtcnv_state);
+		nw_spifb_prepare_frame(nw, &shadow->data[0], state->fb,
+				       &shadow->fmtcnv_state);
+		nw_spifb_submit_frame(nw);
 	}
 }
 
@@ -329,7 +365,7 @@ static const struct drm_driver nw_spifb_drm_driver = {
 	.name			= DRIVER_NAME,
 	.desc			= DRIVER_DESC,
 	.major			= 1,
-	.minor			= 0,
+	.minor			= 1,
 };
 
 /* --- SPI probe/remove --- */
@@ -345,7 +381,6 @@ static int nw_spifb_probe(struct spi_device *spi)
 	struct device *dev = &spi->dev;
 	struct nw_spifb *nw;
 	struct drm_device *drm;
-	size_t buf_size;
 	int ret;
 
 	nw = devm_drm_dev_alloc(dev, &nw_spifb_drm_driver,
@@ -370,17 +405,27 @@ static int nw_spifb_probe(struct spi_device *spi)
 	if (nw->vheight < nw->height)
 		nw->vheight = nw->height;
 
-	/* Allocate DMA-coherent TX buffer (sized for physical display) */
-	buf_size = PAGE_ALIGN(nw->width * nw->height * 2);
-	nw->tx_buf = dma_alloc_coherent(dev, buf_size, &nw->tx_dma, GFP_KERNEL);
-	if (!nw->tx_buf)
+	/* Allocate two TX buffers for double buffering (cached for fast CPU writes) */
+	nw->tx_buf[0] = devm_kzalloc(dev, nw->width * nw->height * 2,
+				      GFP_KERNEL);
+	if (!nw->tx_buf[0])
 		return -ENOMEM;
-	nw->tx_size = buf_size;
+
+	nw->tx_buf[1] = devm_kzalloc(dev, nw->width * nw->height * 2,
+				      GFP_KERNEL);
+	if (!nw->tx_buf[1])
+		return -ENOMEM;
+
+	nw->tx_write = 0;
+
+	/* Start with completion signaled (no transfer in flight) */
+	init_completion(&nw->tx_done);
+	complete(&nw->tx_done);
 
 	/* DRM mode config */
 	ret = drmm_mode_config_init(drm);
 	if (ret)
-		goto err_dma;
+		return ret;
 
 	drm->mode_config.funcs = &nw_spifb_mode_config_funcs;
 	drm->mode_config.min_width = nw->vwidth;
@@ -393,7 +438,7 @@ static int nw_spifb_probe(struct spi_device *spi)
 				 &nw_spifb_connector_funcs,
 				 DRM_MODE_CONNECTOR_SPI);
 	if (ret)
-		goto err_dma;
+		return ret;
 
 	drm_connector_helper_add(&nw->connector, &nw_spifb_connector_hfuncs);
 
@@ -405,7 +450,7 @@ static int nw_spifb_probe(struct spi_device *spi)
 					   NULL, /* no format modifiers */
 					   &nw->connector);
 	if (ret)
-		goto err_dma;
+		return ret;
 
 	drm_plane_enable_fb_damage_clips(&nw->pipe.plane);
 
@@ -413,7 +458,7 @@ static int nw_spifb_probe(struct spi_device *spi)
 
 	ret = drm_dev_register(drm, 0);
 	if (ret)
-		goto err_dma;
+		return ret;
 
 	spi_set_drvdata(spi, drm);
 
@@ -425,10 +470,6 @@ static int nw_spifb_probe(struct spi_device *spi)
 		 spi->max_speed_hz);
 
 	return 0;
-
-err_dma:
-	dma_free_coherent(dev, nw->tx_size, nw->tx_buf, nw->tx_dma);
-	return ret;
 }
 
 static void nw_spifb_remove(struct spi_device *spi)
@@ -437,7 +478,9 @@ static void nw_spifb_remove(struct spi_device *spi)
 	struct nw_spifb *nw = drm_to_nw(drm);
 
 	drm_dev_unplug(drm);
-	dma_free_coherent(&spi->dev, nw->tx_size, nw->tx_buf, nw->tx_dma);
+
+	/* Wait for any in-flight SPI transfer (1s timeout) */
+	wait_for_completion_timeout(&nw->tx_done, HZ);
 }
 
 static void nw_spifb_shutdown(struct spi_device *spi)

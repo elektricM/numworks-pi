@@ -35,6 +35,15 @@ Quick checklist for a fresh SD card setup.
 - [ ] Add `blacklist spifb` to `/etc/modprobe.d/numworks.conf`
 - [ ] Set keyboard to US in `/etc/default/keyboard`: `XKBLAYOUT="us"`
 - [ ] Set keyboard to US in `~/.config/labwc/environment`: `XKB_DEFAULT_LAYOUT=us`
+- [ ] Set render device in `~/.config/labwc/environment`: `WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128`
+- [ ] Set system labwc env: `WLR_RENDERER=pixman` in `/etc/xdg/labwc/environment` (for greeter)
+
+## Boot Optimizations
+
+- [ ] Disable cloud-init: `sudo touch /etc/cloud/cloud-init.disabled` (saves ~9s)
+- [ ] Fix netplan permissions: `sudo chmod 600 /lib/netplan/00-network-manager-all.yaml`
+- [ ] Remove netplan WiFi YAML configs, use direct NetworkManager connection file instead
+- [ ] Set shutdown timeout: `DefaultTimeoutStopSec=10s` in `/etc/systemd/system.conf`
 
 ## Verify
 
