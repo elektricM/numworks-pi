@@ -1,6 +1,9 @@
 #!/bin/bash
 # Full Pi setup for NumWorks calculator integration
 # Run on the Pi after cloning the repo: sudo ./pi-linux/scripts/setup.sh
+#
+# If a kernel upgrade happens during apt, the script will ask you to
+# reboot and re-run it so the driver builds against the new kernel.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,8 +24,22 @@ echo ""
 
 # --- System update ---
 echo "--- Updating system ---"
+KERNEL_BEFORE=$(uname -r)
 apt-get update
-apt-get upgrade -y
+apt-get full-upgrade -y
+
+# Check if a new kernel was installed
+NEW_KERNEL=$(ls -1 /lib/modules/ | sort -V | tail -1)
+if [ "$NEW_KERNEL" != "$KERNEL_BEFORE" ]; then
+    echo ""
+    echo "*** Kernel upgraded: $KERNEL_BEFORE -> $NEW_KERNEL ***"
+    echo "*** Reboot and re-run this script to build against the new kernel. ***"
+    echo ""
+    echo "  sudo reboot"
+    echo "  # after reboot:"
+    echo "  sudo bash ~/numworks-pi/pi-linux/scripts/setup.sh"
+    exit 0
+fi
 
 # --- Build dependencies ---
 echo ""
@@ -57,12 +74,10 @@ systemctl enable nwinput
 echo ""
 echo "--- Configuring boot ---"
 
-# config.txt: append NumWorks section if not already present
+# config.txt: append NumWorks entries to existing [all] section if not present
 if ! grep -q 'numworks-spifb' /boot/firmware/config.txt; then
+    # Append SPI display config (stock config.txt already has [all] with enable_uart=1)
     cat >> /boot/firmware/config.txt <<'EOF'
-
-[all]
-enable_uart=1
 
 # NumWorks SPI display
 dtparam=spi=on
@@ -110,13 +125,10 @@ echo "--- Boot optimizations ---"
 # Disable cloud-init
 touch /etc/cloud/cloud-init.disabled
 
-# Fix netplan permissions (prevents NM reload storm)
+# Fix netplan permissions (prevents NM reload storm on boot)
 if [ -f /lib/netplan/00-network-manager-all.yaml ]; then
     chmod 600 /lib/netplan/00-network-manager-all.yaml
 fi
-
-# Remove netplan WiFi YAMLs if any (they cause NM reloads)
-rm -f /etc/netplan/90-NM-*.yaml
 
 # Shutdown timeout (prevents 90s hangs)
 if ! grep -q '^DefaultTimeoutStopSec=10s' /etc/systemd/system.conf; then
@@ -130,6 +142,4 @@ fi
 echo ""
 echo "=== Setup complete ==="
 echo ""
-echo "Remaining manual steps:"
-echo "  1. Configure WiFi if not already done"
-echo "  2. Reboot: sudo reboot"
+echo "Reboot to activate: sudo reboot"
