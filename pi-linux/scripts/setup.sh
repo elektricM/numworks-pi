@@ -28,9 +28,9 @@ KERNEL_BEFORE=$(uname -r)
 apt-get update
 apt-get full-upgrade -y
 
-# Check if a new kernel was installed
-NEW_KERNEL=$(ls -1 /lib/modules/ | sort -V | tail -1)
-if [ "$NEW_KERNEL" != "$KERNEL_BEFORE" ]; then
+# Check if a new kernel was installed for our architecture
+NEW_KERNEL=$(ls -1d /lib/modules/*-v7 2>/dev/null | sort -V | tail -1 | xargs basename)
+if [ -n "$NEW_KERNEL" ] && [ "$NEW_KERNEL" != "$KERNEL_BEFORE" ]; then
     echo ""
     echo "*** Kernel upgraded: $KERNEL_BEFORE -> $NEW_KERNEL ***"
     echo "*** Reboot and re-run this script to build against the new kernel. ***"
