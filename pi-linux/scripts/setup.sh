@@ -27,7 +27,7 @@ apt-get upgrade -y
 # --- Build dependencies ---
 echo ""
 echo "--- Installing build dependencies ---"
-apt-get install -y raspberrypi-kernel-headers build-essential mesa-utils
+apt-get install -y linux-headers-$(uname -r) build-essential mesa-utils
 
 # --- Display driver ---
 echo ""
