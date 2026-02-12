@@ -15,12 +15,12 @@
 
 #define NUM_KEYS 53
 #define NUM_MODES 2
-#define MOUSE_INTERVAL_MS 16  /* ~60 Hz mouse update rate */
+#define MOUSE_INTERVAL_MS 8   /* ~120 Hz mouse update rate */
 #define DEFAULT_TTY "/dev/ttyS0"
 
 /* Mouse acceleration: ramps from MIN to MAX speed over RAMP_MS */
 #define MOUSE_MIN_SPEED 1
-#define MOUSE_MAX_SPEED 12
+#define MOUSE_MAX_SPEED 4
 #define MOUSE_RAMP_MS 600
 
 typedef struct {
@@ -199,11 +199,19 @@ void process(u_int64_t scan) {
 
   if (!changed) goto done;
 
-  /* Toggle mouse mode on power button (bit 7) press */
+  /* Toggle mouse mode on power button (bit 7) press, debounced */
   if ((changed & (1ULL<<7)) && (scan & (1ULL<<7))) {
-    mouse_mode = !mouse_mode;
-    mouse_active = 0;
-    fprintf(stderr, "Mouse mode: %s\n", mouse_mode ? "ON" : "OFF");
+    static struct timespec last_toggle = {0, 0};
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    long elapsed_ms = (now.tv_sec - last_toggle.tv_sec) * 1000
+                    + (now.tv_nsec - last_toggle.tv_nsec) / 1000000;
+    if (elapsed_ms > 300) {
+      mouse_mode = !mouse_mode;
+      mouse_active = 0;
+      last_toggle = now;
+      fprintf(stderr, "Mouse mode: %s\n", mouse_mode ? "ON" : "OFF");
+    }
   }
 
   /* Switch keymap mode */

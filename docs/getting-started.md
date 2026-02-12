@@ -191,6 +191,7 @@ SPI runs at 62.5 MHz (250 MHz / 4). UART runs at 115200 baud, 8N1.
 - Check the service is running: `systemctl status nwinput`
 - Verify UART wiring (PD8 to GPIO 15)
 - Confirm `console=serial0,115200` is **removed** from `cmdline.txt` (otherwise the kernel grabs the UART)
+- Mask the serial getty: `sudo systemctl mask serial-getty@ttyS0.service` (it competes with nwinput for the port, causing crashes and random mode switches)
 - Check that `uinput` is in `/etc/modules` or loaded: `lsmod | grep uinput`
 
 ### Wrong keyboard layout / garbled input

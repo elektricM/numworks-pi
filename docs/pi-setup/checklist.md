@@ -31,6 +31,7 @@ Quick checklist for a fresh SD card setup.
 ## System Config
 
 - [ ] Remove `console=serial0,115200` from `/boot/firmware/cmdline.txt`
+- [ ] Mask serial getty: `sudo systemctl mask serial-getty@ttyS0.service`
 - [ ] Add `i2c-dev` and `uinput` to `/etc/modules`
 - [ ] Add `blacklist spifb` to `/etc/modprobe.d/numworks.conf`
 - [ ] Set keyboard to US in `/etc/default/keyboard`: `XKBLAYOUT="us"`

@@ -52,4 +52,7 @@ enable_uart=1
 
 # NumWorks SPI display
 dtparam=spi=on
-dtoverlay=numworks-spifb
+dtoverlay=numworks-spifb,vwidth=640,vheight=480
+
+# Camera (manual overlay for OV9281)
+dtoverlay=ov9281
