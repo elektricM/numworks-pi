@@ -139,17 +139,12 @@ systemctl mask e2scrub_reap.service 2>/dev/null || true
 systemctl mask udisks2.service 2>/dev/null || true
 systemctl mask packagekit.service 2>/dev/null || true
 
-# Remove netplan completely (fixes NM 17s reload storm)
-echo "Removing netplan to fix NetworkManager delays..."
-if dpkg -l netplan.io >/dev/null 2>&1; then
-    # Preserve current WiFi connection before removing netplan
-    WIFI_CONN=$(nmcli -t -f NAME,TYPE c show --active | grep ':wifi$' | cut -d: -f1 | head -1)
-    if [ -n "$WIFI_CONN" ]; then
-        echo "Active WiFi: $WIFI_CONN (will be preserved)"
-    fi
-    apt-get remove --purge -y netplan.io 2>/dev/null || true
-    rm -rf /etc/netplan /lib/netplan /run/netplan 2>/dev/null || true
-fi
+# Fix netplan NM reload storm (don't remove, just fix permissions)
+# Netplan triggers 4x NetworkManager reloads on boot (~17s wasted)
+# Fix: restrict permissions so NM doesn't see the yaml files
+echo "Fixing netplan permissions to reduce NM reload delays..."
+chmod 600 /etc/netplan/*.yaml 2>/dev/null || true
+chmod 600 /lib/netplan/*.yaml 2>/dev/null || true
 
 # Shutdown timeout (prevents 90s hangs)
 if ! grep -q '^DefaultTimeoutStopSec=10s' /etc/systemd/system.conf; then
