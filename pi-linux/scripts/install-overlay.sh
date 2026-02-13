@@ -4,9 +4,23 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OVERLAY_DIR="$SCRIPT_DIR/../overlay"
+DTS_FILE="$OVERLAY_DIR/numworks-spifb.dts"
 
 if [ "$EUID" -ne 0 ]; then
     echo "Run as root: sudo $0"
+    exit 1
+fi
+
+# Check dtc is installed
+if ! command -v dtc &>/dev/null; then
+    echo "Error: dtc (device-tree-compiler) not found"
+    echo "Install with: sudo apt-get install device-tree-compiler"
+    exit 1
+fi
+
+# Check source file exists
+if [ ! -f "$DTS_FILE" ]; then
+    echo "Error: DTS source not found: $DTS_FILE"
     exit 1
 fi
 
@@ -21,10 +35,21 @@ else
 fi
 
 echo "Compiling DT overlay..."
-dtc -@ -I dts -O dtb -o "$OVERLAY_DEST/numworks-spifb.dtbo" \
-    "$OVERLAY_DIR/numworks-spifb.dts" 2>/dev/null
+DTBO_FILE="$OVERLAY_DEST/numworks-spifb.dtbo"
 
-echo "Installed: $OVERLAY_DEST/numworks-spifb.dtbo"
+# Compile with error output visible
+if ! dtc -@ -I dts -O dtb -o "$DTBO_FILE" "$DTS_FILE"; then
+    echo "Error: DT overlay compilation failed"
+    exit 1
+fi
+
+# Verify output was created
+if [ ! -f "$DTBO_FILE" ]; then
+    echo "Error: Output file not created: $DTBO_FILE"
+    exit 1
+fi
+
+echo "Installed: $DTBO_FILE"
 echo ""
 echo "Add to config.txt:"
 echo "  dtparam=spi=on"
