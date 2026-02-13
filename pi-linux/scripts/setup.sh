@@ -4,6 +4,8 @@
 #
 # If a kernel upgrade happens during apt, the script will ask you to
 # reboot and re-run it so the driver builds against the new kernel.
+#
+# Safe to run multiple times — idempotent operations.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,7 +17,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-ACTUAL_USER="${SUDO_USER:-pi}"
+ACTUAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo pi)}"
 ACTUAL_HOME=$(eval echo "~$ACTUAL_USER")
 
 echo "=== NumWorks Pi Setup ==="
@@ -29,7 +31,7 @@ apt-get update
 apt-get full-upgrade -y
 
 # Check if a new kernel was installed for our architecture
-NEW_KERNEL=$(ls -1d /lib/modules/*-v7 2>/dev/null | sort -V | tail -1 | xargs basename)
+NEW_KERNEL=$(ls -1d /lib/modules/*-v7* 2>/dev/null | sort -V | tail -1 | xargs basename 2>/dev/null || true)
 if [ -n "$NEW_KERNEL" ] && [ "$NEW_KERNEL" != "$KERNEL_BEFORE" ]; then
     echo ""
     echo "*** Kernel upgraded: $KERNEL_BEFORE -> $NEW_KERNEL ***"
@@ -77,9 +79,8 @@ systemctl enable nwinput
 echo ""
 echo "--- Configuring boot ---"
 
-# config.txt: append NumWorks entries to existing [all] section if not present
-if ! grep -q 'numworks-spifb' /boot/firmware/config.txt; then
-    # Append SPI display config (stock config.txt already has [all] with enable_uart=1)
+# config.txt: append NumWorks entries (idempotent - check for exact line)
+if ! grep -q '^dtoverlay=numworks-spifb' /boot/firmware/config.txt; then
     cat >> /boot/firmware/config.txt <<'EOF'
 
 # NumWorks SPI display
@@ -104,7 +105,7 @@ echo "--- System configuration ---"
 # Kernel modules
 cp "$CONFIG_DIR/modules-load.d-numworks.conf" /etc/modules-load.d/numworks.conf
 
-# Keyboard layout
+# Keyboard layout (sets for fbcon/VT; labwc uses its own env file)
 cp "$CONFIG_DIR/keyboard" /etc/default/keyboard
 
 # Mask serial getty (conflicts with nwinput on ttyS0)
@@ -117,7 +118,7 @@ chown -R "$ACTUAL_USER:$ACTUAL_USER" "$ACTUAL_HOME/.config/labwc"
 
 # labwc system environment (WLR_RENDERER=pixman for greeter)
 mkdir -p /etc/xdg/labwc
-if ! grep -q 'WLR_RENDERER' /etc/xdg/labwc/environment 2>/dev/null; then
+if ! grep -q '^WLR_RENDERER=' /etc/xdg/labwc/environment 2>/dev/null; then
     echo 'WLR_RENDERER=pixman' >> /etc/xdg/labwc/environment
 fi
 
@@ -125,12 +126,29 @@ fi
 echo ""
 echo "--- Boot optimizations ---"
 
-# Disable cloud-init
+# Disable cloud-init completely (services + disable file)
 touch /etc/cloud/cloud-init.disabled
+systemctl mask cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
 
-# Fix netplan permissions (prevents NM reload storm on boot)
-if [ -f /lib/netplan/00-network-manager-all.yaml ]; then
-    chmod 600 /lib/netplan/00-network-manager-all.yaml
+# Mask unnecessary services
+echo "Masking unnecessary services..."
+systemctl mask ModemManager.service 2>/dev/null || true
+systemctl mask cups.service cups-browsed.service 2>/dev/null || true
+systemctl mask bluetooth.service 2>/dev/null || true
+systemctl mask e2scrub_reap.service 2>/dev/null || true
+systemctl mask udisks2.service 2>/dev/null || true
+systemctl mask packagekit.service 2>/dev/null || true
+
+# Remove netplan completely (fixes NM 17s reload storm)
+echo "Removing netplan to fix NetworkManager delays..."
+if dpkg -l netplan.io >/dev/null 2>&1; then
+    # Preserve current WiFi connection before removing netplan
+    WIFI_CONN=$(nmcli -t -f NAME,TYPE c show --active | grep ':wifi$' | cut -d: -f1 | head -1)
+    if [ -n "$WIFI_CONN" ]; then
+        echo "Active WiFi: $WIFI_CONN (will be preserved)"
+    fi
+    apt-get remove --purge -y netplan.io 2>/dev/null || true
+    rm -rf /etc/netplan /lib/netplan /run/netplan 2>/dev/null || true
 fi
 
 # Shutdown timeout (prevents 90s hangs)
@@ -142,7 +160,17 @@ if ! grep -q '^DefaultTimeoutStopSec=10s' /etc/systemd/system.conf; then
     fi
 fi
 
+# --- Filesystem protection ---
 echo ""
+echo "--- Filesystem protection ---"
+echo ""
+echo "WARNING: Hard power-off can corrupt the SD card."
+echo "Consider enabling overlayfs (read-only root) via raspi-config:"
+echo "  sudo raspi-config → Performance → Overlay File System → Enable"
+echo ""
+echo "Or mount critical partitions read-only in /etc/fstab."
+echo ""
+
 echo "=== Setup complete ==="
 echo ""
 echo "Reboot to activate: sudo reboot"

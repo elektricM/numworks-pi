@@ -117,6 +117,7 @@ See [zardam's original blog post](https://zardam.github.io/post/raspberrypi-numw
 
 - [Architecture](docs/architecture.md) — display pipeline, power design, keyboard protocol, driver internals
 - [Getting Started](docs/getting-started.md) — full setup walkthrough
+- [Performance Investigation](docs/performance-investigation.md) — FPS analysis, SPI optimization, NEON experiments
 - [Keyboard Map](docs/keymap.md) — full key mapping reference (modes, mouse, special characters)
 - [Running Doom](docs/doom.md) — Chocolate Doom setup and controls
 - [Firmware Build Guide](docs/firmware/build-guide.md) — build, flash, build flags
