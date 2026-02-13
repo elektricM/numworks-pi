@@ -46,11 +46,12 @@
 #define DRIVER_DESC	"NumWorks SPI framebuffer display"
 
 /*
- * SPI transfer chunk size. BCM2835 DMA has a per-transfer limit.
- * 32768 bytes per chunk, matching the BCM2835 DMA limit.
+ * SPI frame size. The BCM2835 DMA engine supports transfers up to 1GB,
+ * so we send the entire frame in a single transfer to minimize overhead.
+ * Previous 32KB chunking added ~2ms DMA setup overhead per frame.
  */
-#define SPI_CHUNK_SIZE	32768
-#define MAX_SPI_XFERS	5
+#define FRAME_SIZE	(320 * 240 * 2)	/* 153,600 bytes RGB565 */
+#define MAX_SPI_XFERS	1
 
 struct nw_spifb {
 	struct drm_device drm;
@@ -195,32 +196,18 @@ static void nw_spifb_submit_frame(struct nw_spifb *nw)
 {
 	size_t frame_size = nw->width * nw->height * 2; /* RGB565 output */
 	void *buf = nw->tx_buf[nw->tx_write];
-	size_t remaining, offset;
-	int n_xfers;
 
 	/* Wait for previous async transfer to finish */
 	wait_for_completion(&nw->tx_done);
 	reinit_completion(&nw->tx_done);
 
-	/* Build SPI message with 32KB chunks */
+	/* Single SPI transfer for entire frame — no chunking overhead */
 	spi_message_init(&nw->tx_msg);
-	memset(nw->tx_xfers, 0, sizeof(nw->tx_xfers));
+	memset(&nw->tx_xfers[0], 0, sizeof(nw->tx_xfers[0]));
 
-	remaining = frame_size;
-	offset = 0;
-	n_xfers = 0;
-
-	while (remaining > 0 && n_xfers < MAX_SPI_XFERS) {
-		size_t len = min_t(size_t, remaining, SPI_CHUNK_SIZE);
-
-		nw->tx_xfers[n_xfers].tx_buf = (u8 *)buf + offset;
-		nw->tx_xfers[n_xfers].len = len;
-		spi_message_add_tail(&nw->tx_xfers[n_xfers], &nw->tx_msg);
-
-		offset += len;
-		remaining -= len;
-		n_xfers++;
-	}
+	nw->tx_xfers[0].tx_buf = buf;
+	nw->tx_xfers[0].len = frame_size;
+	spi_message_add_tail(&nw->tx_xfers[0], &nw->tx_msg);
 
 	nw->tx_msg.complete = nw_spifb_spi_complete;
 	nw->tx_msg.context = nw;
@@ -365,7 +352,7 @@ static const struct drm_driver nw_spifb_drm_driver = {
 	.name			= DRIVER_NAME,
 	.desc			= DRIVER_DESC,
 	.major			= 1,
-	.minor			= 1,
+	.minor			= 2,
 };
 
 /* --- SPI probe/remove --- */
