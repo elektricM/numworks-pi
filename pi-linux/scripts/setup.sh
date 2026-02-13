@@ -66,8 +66,9 @@ echo "--- Building and installing nwinput ---"
 cd "$PI_LINUX/uinput-serial-keyboard"
 gcc -o nwinput uinput.c
 cp nwinput /usr/local/bin/nwinput
-cp "$SCRIPT_DIR/resolution.sh" /usr/local/bin/nw-resolution
+cp "$SCRIPT_DIR/nw-resolution" /usr/local/bin/nw-resolution
 chmod +x /usr/local/bin/nw-resolution
+cp "$CONFIG_DIR/nw-resolution.desktop" /usr/share/applications/
 cp "$CONFIG_DIR/nwinput.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable nwinput

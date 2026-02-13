@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Display Resolution
+Comment=Switch display resolution
+Exec=nw-resolution
+Icon=preferences-desktop-display
+Terminal=false
+Type=Application
+Categories=Settings;

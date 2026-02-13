@@ -1,0 +1,25 @@
+#!/bin/bash
+# NumWorks display text size switcher
+# Uses GTK text-scaling-factor for zero-cost readability adjustment
+# (wlr-randr fractional scales halve FPS on Pi Zero 2W — avoid them)
+
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+export GSK_RENDERER=cairo
+
+current=$(gsettings get org.gnome.desktop.interface text-scaling-factor)
+
+choice=$(zenity --list \
+    --title="Display Text Size" \
+    --text="Current: ${current}x\nSelect text size:" \
+    --column="Scale" --column="Description" \
+    "1.0" "Small (default)" \
+    "1.25" "Medium" \
+    "1.5" "Large" \
+    "2.0" "Extra Large" \
+    --width=300 --height=280 2>/dev/null)
+
+if [ -n "$choice" ]; then
+    gsettings set org.gnome.desktop.interface text-scaling-factor "$choice"
+fi
