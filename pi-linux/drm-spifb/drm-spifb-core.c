@@ -19,6 +19,7 @@
  * Based on drivers/gpu/drm/tiny/repaper.c skeleton pattern.
  */
 
+#include <asm/neon.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/iosys-map.h>
@@ -76,9 +77,15 @@ static inline struct nw_spifb *drm_to_nw(struct drm_device *drm)
 	return container_of(drm, struct nw_spifb, drm);
 }
 
+/* NEON-accelerated scaling (drm-spifb-neon.c) */
+void nw_neon_scale_row_2to1_xrgb8888(const u32 *src, u16 *dst, u32 width);
+
 /*
  * Downscale XRGB8888 framebuffer to big-endian RGB565 with nearest-neighbor.
  * Source is vwidth x vheight XRGB8888, output is width x height RGB565 BE.
+ *
+ * For the exact 2:1 case (640x480 → 320x240), uses NEON SIMD to process
+ * 8 output pixels per iteration. Falls back to scalar for other ratios.
  */
 static void nw_spifb_scale_xrgb8888(struct nw_spifb *nw,
 				     const struct iosys_map *src,
@@ -89,19 +96,34 @@ static void nw_spifb_scale_xrgb8888(struct nw_spifb *nw,
 	const u8 *src_base = src->vaddr;
 	u32 w = nw->width, h = nw->height;
 	u32 vw = nw->vwidth, vh = nw->vheight;
-	u32 x, y;
+	u32 y;
 
-	for (y = 0; y < h; y++) {
-		u32 sy = y * vh / h;
-		const u32 *src_row = (const u32 *)(src_base + sy * src_pitch);
-		for (x = 0; x < w; x++) {
-			u32 sx = x * vw / w;
-			u32 pix = src_row[sx];
-			u16 r = (pix >> 16) & 0xff;
-			u16 g = (pix >> 8) & 0xff;
-			u16 b = pix & 0xff;
-			u16 rgb565 = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
-			tx[y * w + x] = cpu_to_be16(rgb565);
+	if (vw == w * 2 && vh == h * 2 && (w % 8) == 0) {
+		/* NEON fast path: exact 2:1 downscale, width multiple of 8 */
+		kernel_neon_begin();
+		for (y = 0; y < h; y++) {
+			const u32 *src_row = (const u32 *)(src_base + (y * 2) * src_pitch);
+			nw_neon_scale_row_2to1_xrgb8888(src_row,
+							&tx[y * w], w);
+		}
+		kernel_neon_end();
+	} else {
+		/* Scalar fallback: arbitrary ratios */
+		u32 x;
+
+		for (y = 0; y < h; y++) {
+			u32 sy = y * vh / h;
+			const u32 *src_row = (const u32 *)(src_base + sy * src_pitch);
+			for (x = 0; x < w; x++) {
+				u32 sx = x * vw / w;
+				u32 pix = src_row[sx];
+				u16 r = (pix >> 16) & 0xff;
+				u16 g = (pix >> 8) & 0xff;
+				u16 b = pix & 0xff;
+				u16 rgb565 = ((r >> 3) << 11) |
+					     ((g >> 2) << 5) | (b >> 3);
+				tx[y * w + x] = cpu_to_be16(rgb565);
+			}
 		}
 	}
 }
@@ -365,7 +387,7 @@ static const struct drm_driver nw_spifb_drm_driver = {
 	.name			= DRIVER_NAME,
 	.desc			= DRIVER_DESC,
 	.major			= 1,
-	.minor			= 1,
+	.minor			= 2,
 };
 
 /* --- SPI probe/remove --- */

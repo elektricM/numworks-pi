@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=Display Resolution
-Comment=Switch display resolution
+Name=Display Text Size
+Comment=Adjust text size for readability
 Exec=nw-resolution
 Icon=preferences-desktop-display
 Terminal=false
