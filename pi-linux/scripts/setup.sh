@@ -71,6 +71,9 @@ cp nwinput /usr/local/bin/nwinput
 cp "$PI_LINUX/apps/nw-resolution/nw-resolution" /usr/local/bin/nw-resolution
 chmod +x /usr/local/bin/nw-resolution
 cp "$PI_LINUX/apps/nw-resolution/nw-resolution.desktop" /usr/share/applications/
+cp "$PI_LINUX/apps/nw-camera/nw-camera" /usr/local/bin/nw-camera
+chmod +x /usr/local/bin/nw-camera
+cp "$PI_LINUX/apps/nw-camera/nw-camera.desktop" /usr/share/applications/
 cp "$CONFIG_DIR/nwinput.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable nwinput

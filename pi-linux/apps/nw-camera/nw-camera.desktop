@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Camera
+Comment=Take photos or preview camera
+Exec=nw-camera
+Icon=camera-photo
+Terminal=false
+Type=Application
+Categories=Utility;
