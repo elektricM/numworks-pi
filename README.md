@@ -21,7 +21,7 @@ Based on [zardam's original project](https://zardam.github.io/post/raspberrypi-n
 | **Device Tree overlay** | [`pi-linux/overlay/`](pi-linux/overlay/) | SPI device registration for the display driver |
 | **Keyboard daemon** | [`pi-linux/uinput-serial-keyboard/`](pi-linux/uinput-serial-keyboard/) | uinput daemon: UART key input + mouse mode, patched for Wayland |
 | **Pi config files** | [`pi-linux/config/`](pi-linux/config/) | Boot config, systemd service, keyboard layout |
-| **Power PCB** | [`hardware/nwpi/`](hardware/nwpi/) | Custom PCB: USB charging, LiPo battery, 5V boost for Pi |
+| **Power PCB** | [`nwpi-pcb`](https://github.com/elektricM/nwpi-pcb) | Custom PCB: USB charging, LiPo battery, 5V boost for Pi |
 | **Documentation** | [`docs/`](docs/) | Architecture, setup guides, firmware reference |
 
 ## How It Works

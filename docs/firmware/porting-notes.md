@@ -27,11 +27,6 @@ This documents the changes made when porting zardam's Raspberry Pi integration f
 - **zardam:** Single `rpi.h`.
 - **Upsilon:** Split into public `ion/include/ion/rpi.h` (API for apps) and private `drivers/rpi.h` (hardware internals).
 
-## i18n
-
-- **zardam:** 5 languages.
-- **Upsilon:** 8 languages.
-
 ## Simulator Stub
 
 - **zardam:** Not addressed; simulator builds with RPI code would fail.

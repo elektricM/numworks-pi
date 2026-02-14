@@ -34,7 +34,7 @@ On the Pi (via SSH or terminal):
 
 ```bash
 cd ~
-git clone --recurse-submodules https://github.com/elektricM/numworks-rpi.git
+git clone --recurse-submodules https://github.com/elektricM/numworks-pi.git
 ```
 
 This pulls down the DRM driver, keyboard daemon, Device Tree overlay, and config files.
@@ -46,7 +46,7 @@ All commands below run on the Pi itself.
 ### 4.1 Build and Install the DRM Display Driver
 
 ```bash
-cd ~/numworks-rpi/pi-linux/drm-spifb
+cd ~/numworks-pi/pi-linux/drm-spifb
 make
 sudo make install
 sudo depmod -a
@@ -57,7 +57,7 @@ This builds `drm-spifb.ko`, a DRM/KMS tiny driver that sends framebuffer content
 ### 4.2 Install the Device Tree Overlay
 
 ```bash
-sudo ~/numworks-rpi/pi-linux/scripts/install-overlay.sh
+sudo ~/numworks-pi/pi-linux/scripts/install-overlay.sh
 ```
 
 This compiles `numworks-spifb.dts` and copies the resulting `.dtbo` to `/boot/firmware/overlays/`.
@@ -65,7 +65,7 @@ This compiles `numworks-spifb.dts` and copies the resulting `.dtbo` to `/boot/fi
 ### 4.3 Build the Keyboard Daemon
 
 ```bash
-cd ~/numworks-rpi/pi-linux/uinput-serial-keyboard
+cd ~/numworks-pi/pi-linux/uinput-serial-keyboard
 gcc uinput.c -o uinput
 ```
 
@@ -95,7 +95,7 @@ uinput
 ### 4.5 Install the Keyboard Service
 
 ```bash
-sudo cp ~/numworks-rpi/pi-linux/config/nwinput.service /etc/systemd/system/
+sudo cp ~/numworks-pi/pi-linux/config/nwinput.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable nwinput
 ```
@@ -108,7 +108,7 @@ The calculator keymap assumes US QWERTY. Set it for the Wayland compositor (labw
 
 ```bash
 mkdir -p ~/.config/labwc
-cp ~/numworks-rpi/pi-linux/config/labwc-environment ~/.config/labwc/environment
+cp ~/numworks-pi/pi-linux/config/labwc-environment ~/.config/labwc/environment
 ```
 
 The file sets:
@@ -120,7 +120,7 @@ XKB_DEFAULT_LAYOUT=us
 Also set the system keyboard layout:
 
 ```bash
-sudo cp ~/numworks-rpi/pi-linux/config/keyboard /etc/default/keyboard
+sudo cp ~/numworks-pi/pi-linux/config/keyboard /etc/default/keyboard
 ```
 
 ### 4.7 Reboot
@@ -138,7 +138,7 @@ This runs on your development machine (not the Pi).
 The firmware is an Upsilon fork with Raspberry Pi integration support.
 
 ```bash
-cd ~/numworks-rpi/firmware
+cd ~/numworks-pi/firmware
 make MODEL=n0100 ENABLE_RPI=1 OMEGA_USERNAME="YourName" EPSILON_I18N=en -j$(nproc)
 ```
 
