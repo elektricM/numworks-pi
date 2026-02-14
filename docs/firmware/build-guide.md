@@ -9,8 +9,8 @@
 ## Clone
 
 ```bash
-git clone --recurse-submodules https://github.com/elektricM/numworks-rpi.git
-cd numworks-rpi/firmware
+git clone --recurse-submodules https://github.com/elektricM/numworks-pi.git
+cd numworks-pi/firmware
 ```
 
 ## Build (N0100 device)
