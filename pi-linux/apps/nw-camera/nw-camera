@@ -1,0 +1,5 @@
+#!/bin/bash
+# NumWorks camera - rpicam viewfinder with full ISP processing
+# --denoise cdn_fast: fast colour denoise (better quality, low overhead)
+# --awb auto: auto white balance
+rpicam-hello -t 0 --denoise cdn_fast --awb auto
