@@ -62,21 +62,26 @@ echo ""
 echo "--- Installing DT overlay ---"
 "$SCRIPT_DIR/install-overlay.sh"
 
-# --- Keyboard daemon ---
+# --- nwpid (NumWorks Pi Daemon) ---
 echo ""
-echo "--- Building and installing nwinput ---"
-cd "$PI_LINUX/uinput-serial-keyboard"
-gcc -o nwinput uinput.c
-cp nwinput /usr/local/bin/nwinput
+echo "--- Building and installing nwpid ---"
+cd "$PI_LINUX/nwpid"
+make clean && make
+cp nwpid /usr/local/bin/nwpid
+cp nwpid.service /etc/systemd/system/
+# Disable old nwinput if present
+systemctl disable nwinput 2>/dev/null || true
+systemctl stop nwinput 2>/dev/null || true
+systemctl daemon-reload
+systemctl enable nwpid
+
+# --- Apps ---
 cp "$PI_LINUX/apps/nw-resolution/nw-resolution" /usr/local/bin/nw-resolution
 chmod +x /usr/local/bin/nw-resolution
 cp "$PI_LINUX/apps/nw-resolution/nw-resolution.desktop" /usr/share/applications/
 cp "$PI_LINUX/apps/nw-camera/nw-camera" /usr/local/bin/nw-camera
 chmod +x /usr/local/bin/nw-camera
 cp "$PI_LINUX/apps/nw-camera/nw-camera.desktop" /usr/share/applications/
-cp "$CONFIG_DIR/nwinput.service" /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable nwinput
 
 # --- Boot config ---
 echo ""
@@ -93,6 +98,12 @@ EOF
     echo "Appended NumWorks config to config.txt"
 else
     echo "config.txt already configured"
+fi
+
+# config.txt: add camera overlay (idempotent)
+if ! grep -q '^dtoverlay=ov9281' /boot/firmware/config.txt; then
+    echo 'dtoverlay=ov9281' >> /boot/firmware/config.txt
+    echo "Added camera overlay to config.txt"
 fi
 
 # cmdline.txt: remove serial console if present
@@ -141,6 +152,8 @@ systemctl mask bluetooth.service 2>/dev/null || true
 systemctl mask e2scrub_reap.service 2>/dev/null || true
 systemctl mask udisks2.service 2>/dev/null || true
 systemctl mask packagekit.service 2>/dev/null || true
+systemctl mask plymouth-poweroff.service plymouth-halt.service plymouth-reboot.service 2>/dev/null || true
+systemctl mask nfs-blkmap.service rpcbind.service rpcbind.socket 2>/dev/null || true
 
 # Fix netplan NM reload storm (don't remove, just fix permissions)
 # Netplan triggers 4x NetworkManager reloads on boot (~17s wasted)
@@ -157,6 +170,10 @@ if ! grep -q '^DefaultTimeoutStopSec=10s' /etc/systemd/system.conf; then
         echo 'DefaultTimeoutStopSec=10s' >> /etc/systemd/system.conf
     fi
 fi
+
+# Enable persistent journal for debugging
+mkdir -p /var/log/journal
+systemd-tmpfiles --create --prefix /var/log/journal 2>/dev/null || true
 
 # --- Filesystem protection ---
 echo ""

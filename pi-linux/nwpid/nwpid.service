@@ -1,0 +1,11 @@
+[Unit]
+Description=NumWorks Pi Daemon
+After=local-fs.target
+
+[Service]
+ExecStart=/usr/local/bin/nwpid /dev/ttyS0
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
