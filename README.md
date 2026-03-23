@@ -10,7 +10,7 @@ A Raspberry Pi Zero 2 W running Linux inside a NumWorks calculator. The calculat
 
 Based on [zardam's original project](https://zardam.github.io/post/raspberrypi-numworks/) (2018), updated for modern Linux (Debian Trixie, Wayland, DRM/KMS).
 
-<!-- TODO: add photo/GIF here -->
+![Rear internals](docs/images/nwpi-internals-rear.jpg)
 
 ## What's in This Repo
 
