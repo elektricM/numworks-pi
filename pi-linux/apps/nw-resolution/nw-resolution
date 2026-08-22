@@ -14,8 +14,8 @@ choice=$(zenity --list \
     --title="Display Text Size" \
     --text="Current: ${current}x\nSelect text size:" \
     --column="Scale" --column="Description" \
-    "1.0" "Small (default)" \
-    "1.25" "Medium" \
+    "1.0" "Small" \
+    "1.25" "Medium (default)" \
     "1.5" "Large" \
     "2.0" "Extra Large" \
     --width=300 --height=280 2>/dev/null)

@@ -130,6 +130,9 @@ mkdir -p "$ACTUAL_HOME/.config/labwc"
 cp "$CONFIG_DIR/labwc-environment" "$ACTUAL_HOME/.config/labwc/environment"
 chown -R "$ACTUAL_USER:$ACTUAL_USER" "$ACTUAL_HOME/.config/labwc"
 
+# Text scaling (1.25x fits 640x480 without overflow)
+sudo -u "$ACTUAL_USER" dbus-launch gsettings set org.gnome.desktop.interface text-scaling-factor 1.25
+
 # labwc system environment (WLR_RENDERER=pixman for greeter)
 mkdir -p /etc/xdg/labwc
 if ! grep -q '^WLR_RENDERER=' /etc/xdg/labwc/environment 2>/dev/null; then
@@ -151,7 +154,7 @@ systemctl mask cups.service cups-browsed.service 2>/dev/null || true
 systemctl mask bluetooth.service 2>/dev/null || true
 systemctl mask e2scrub_reap.service 2>/dev/null || true
 systemctl mask udisks2.service 2>/dev/null || true
-systemctl mask packagekit.service 2>/dev/null || true
+# PackageKit left enabled — needed for Recommended Software GUI
 systemctl mask plymouth-poweroff.service plymouth-halt.service plymouth-reboot.service 2>/dev/null || true
 systemctl mask nfs-blkmap.service rpcbind.service rpcbind.socket 2>/dev/null || true
 
