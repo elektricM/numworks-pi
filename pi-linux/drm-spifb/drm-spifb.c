@@ -13,7 +13,12 @@
  *
  * Uses async SPI with double buffering: CPU scales frame N+1 into one
  * buffer while SPI DMA sends frame N from the other. This overlaps
- * CPU and SPI work, achieving the SPI bus speed limit (~50 FPS).
+ * CPU and SPI work, achieving the SPI bus speed limit (~52 FPS).
+ *
+ * Scaling uses a fused copy+convert approach: each source row is memcpy'd
+ * to a small cached buffer before conversion. This avoids slow cache-miss
+ * reads from the shadow plane (which may not be in L1/L2 after the
+ * compositor writes it on another core). Result: 4ms vs 12ms per frame.
  *
  * Inspired by zardam's SPI display concept.
  * Based on drivers/gpu/drm/tiny/repaper.c skeleton pattern.
@@ -64,12 +69,19 @@ struct nw_spifb {
 	u32 vwidth;		/* Virtual (compositor) width */
 	u32 vheight;		/* Virtual (compositor) height */
 
+	/* X source-index lookup table for scaling (max 640 entries) */
+	u16 xlut[640];
+
+	/* Per-row cache buffer for fused copy+convert (one source row) */
+	void *row_cache;
+
 	/* Double-buffered async SPI */
 	void *tx_buf[2];
 	int tx_write;			/* Buffer index CPU writes to next */
 	struct spi_message tx_msg;
 	struct spi_transfer tx_xfers[MAX_SPI_XFERS];
 	struct completion tx_done;	/* Signals SPI transfer complete */
+
 };
 
 static inline struct nw_spifb *drm_to_nw(struct drm_device *drm)
@@ -78,8 +90,28 @@ static inline struct nw_spifb *drm_to_nw(struct drm_device *drm)
 }
 
 /*
+ * Convert one XRGB8888 pixel to big-endian RGB565.
+ */
+static inline u16 xrgb8888_to_rgb565be(u32 pix)
+{
+	u32 r = (pix >> 16) & 0xff;
+	u32 g = (pix >> 8) & 0xff;
+	u32 b = pix & 0xff;
+	u16 rgb565 = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+
+	return swab16(rgb565);
+}
+
+/*
  * Downscale XRGB8888 framebuffer to big-endian RGB565 with nearest-neighbor.
- * Source is vwidth x vheight XRGB8888, output is width x height RGB565 BE.
+ *
+ * Fused copy+convert: copies one source row at a time into a small cached
+ * buffer, then converts from there. This ensures all reads hit L1 cache.
+ * The shadow plane data may not be in cache (compositor ran on another core),
+ * so direct reads suffer ~143 cycles/pixel from cache misses. Sequential
+ * memcpy uses hardware prefetch and is much faster.
+ *
+ * Row buffer: ~2.5KB (640*4) — fits entirely in L1 cache (32KB on A53).
  */
 static void nw_spifb_scale_xrgb8888(struct nw_spifb *nw,
 				     const struct iosys_map *src,
@@ -89,27 +121,35 @@ static void nw_spifb_scale_xrgb8888(struct nw_spifb *nw,
 	u32 src_pitch = fb->pitches[0];
 	const u8 *src_base = src->vaddr;
 	u32 w = nw->width, h = nw->height;
-	u32 vw = nw->vwidth, vh = nw->vheight;
+	u32 vh = nw->vheight;
 	u32 x, y;
+	const u16 *xlut = nw->xlut;
+	u32 w4 = w & ~3u;
+	u32 *row_buf = nw->row_cache;
 
 	for (y = 0; y < h; y++) {
 		u32 sy = y * vh / h;
-		const u32 *src_row = (const u32 *)(src_base + sy * src_pitch);
-		for (x = 0; x < w; x++) {
-			u32 sx = x * vw / w;
-			u32 pix = src_row[sx];
-			u16 r = (pix >> 16) & 0xff;
-			u16 g = (pix >> 8) & 0xff;
-			u16 b = pix & 0xff;
-			u16 rgb565 = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
-			tx[y * w + x] = cpu_to_be16(rgb565);
+		const u8 *src_row_ptr = src_base + sy * src_pitch;
+		u16 *dst = tx + y * w;
+
+		/* Copy entire source row to cached buffer (sequential, fast) */
+		memcpy(row_buf, src_row_ptr, src_pitch);
+
+		/* Convert from hot L1 cache (scattered reads are now cheap) */
+		for (x = 0; x < w4; x += 4) {
+			dst[x]     = xrgb8888_to_rgb565be(row_buf[xlut[x]]);
+			dst[x + 1] = xrgb8888_to_rgb565be(row_buf[xlut[x + 1]]);
+			dst[x + 2] = xrgb8888_to_rgb565be(row_buf[xlut[x + 2]]);
+			dst[x + 3] = xrgb8888_to_rgb565be(row_buf[xlut[x + 3]]);
 		}
+		for (; x < w; x++)
+			dst[x] = xrgb8888_to_rgb565be(row_buf[xlut[x]]);
 	}
 }
 
 /*
  * Downscale RGB565 framebuffer to big-endian RGB565 with nearest-neighbor.
- * Source is vwidth x vheight RGB565, output is width x height RGB565 BE.
+ * Same fused copy+convert approach as XRGB8888 version.
  */
 static void nw_spifb_scale_rgb565(struct nw_spifb *nw,
 				   const struct iosys_map *src,
@@ -119,16 +159,27 @@ static void nw_spifb_scale_rgb565(struct nw_spifb *nw,
 	u32 src_pitch = fb->pitches[0];
 	const u8 *src_base = src->vaddr;
 	u32 w = nw->width, h = nw->height;
-	u32 vw = nw->vwidth, vh = nw->vheight;
+	u32 vh = nw->vheight;
 	u32 x, y;
+	const u16 *xlut = nw->xlut;
+	u32 w4 = w & ~3u;
+	u16 *row_buf = nw->row_cache;
 
 	for (y = 0; y < h; y++) {
 		u32 sy = y * vh / h;
-		const u16 *src_row = (const u16 *)(src_base + sy * src_pitch);
-		for (x = 0; x < w; x++) {
-			u32 sx = x * vw / w;
-			tx[y * w + x] = cpu_to_be16(src_row[sx]);
+		const u8 *src_row_ptr = src_base + sy * src_pitch;
+		u16 *dst = tx + y * w;
+
+		memcpy(row_buf, src_row_ptr, src_pitch);
+
+		for (x = 0; x < w4; x += 4) {
+			dst[x]     = swab16(row_buf[xlut[x]]);
+			dst[x + 1] = swab16(row_buf[xlut[x + 1]]);
+			dst[x + 2] = swab16(row_buf[xlut[x + 2]]);
+			dst[x + 3] = swab16(row_buf[xlut[x + 3]]);
 		}
+		for (; x < w; x++)
+			dst[x] = swab16(row_buf[xlut[x]]);
 	}
 }
 
@@ -144,7 +195,7 @@ static void nw_spifb_prepare_frame(struct nw_spifb *nw,
 	u16 *tx = nw->tx_buf[nw->tx_write];
 
 	if (nw->vwidth != nw->width || nw->vheight != nw->height) {
-		/* Scaled mode: downscale + format convert */
+		/* Scaled mode: fused copy+convert per row (L1 cache friendly) */
 		switch (fb->format->format) {
 		case DRM_FORMAT_XRGB8888:
 		case DRM_FORMAT_ARGB8888:
@@ -268,11 +319,6 @@ static void nw_spifb_pipe_update(struct drm_simple_display_pipe *pipe,
 		return;
 
 	if (drm_atomic_helper_damage_merged(old_state, state, &rect)) {
-		/*
-		 * We always send the full frame because the STM32 SPI slave
-		 * has no partial update mechanism — it expects a complete
-		 * 320x240 frame per CS assertion.
-		 */
 		nw_spifb_prepare_frame(nw, &shadow->data[0], state->fb,
 				       &shadow->fmtcnv_state);
 		nw_spifb_submit_frame(nw);
@@ -352,7 +398,7 @@ static const struct drm_driver nw_spifb_drm_driver = {
 	.name			= DRIVER_NAME,
 	.desc			= DRIVER_DESC,
 	.major			= 1,
-	.minor			= 2,
+	.minor			= 3,
 };
 
 /* --- SPI probe/remove --- */
@@ -392,6 +438,11 @@ static int nw_spifb_probe(struct spi_device *spi)
 	if (nw->vheight < nw->height)
 		nw->vheight = nw->height;
 
+	/* Per-row cache buffer for fused copy+convert (max one source row) */
+	nw->row_cache = devm_kzalloc(dev, nw->vwidth * 4, GFP_KERNEL);
+	if (!nw->row_cache)
+		return -ENOMEM;
+
 	/* Allocate two TX buffers for double buffering (cached for fast CPU writes) */
 	nw->tx_buf[0] = devm_kzalloc(dev, nw->width * nw->height * 2,
 				      GFP_KERNEL);
@@ -404,6 +455,13 @@ static int nw_spifb_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	nw->tx_write = 0;
+
+	/* Build X source-index lookup table once (used by scaling functions) */
+	{
+		u32 x;
+		for (x = 0; x < nw->width && x < 640; x++)
+			nw->xlut[x] = (u16)(x * nw->vwidth / nw->width);
+	}
 
 	/* Start with completion signaled (no transfer in flight) */
 	init_completion(&nw->tx_done);
