@@ -4,3 +4,4 @@ Exec=sgt-net
 Icon=sgt-net
 Terminal=false
 Type=Application
+NoDisplay=true

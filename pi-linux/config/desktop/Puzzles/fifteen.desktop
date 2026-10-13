@@ -4,3 +4,4 @@ Exec=sgt-fifteen
 Icon=sgt-fifteen
 Terminal=false
 Type=Application
+NoDisplay=true

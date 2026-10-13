@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=SuperTux
+Exec=nw-game supertux
+Icon=supertux2
+Terminal=false
+Type=Application

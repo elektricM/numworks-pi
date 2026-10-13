@@ -4,3 +4,4 @@ Exec=sgt-keen
 Icon=sgt-keen
 Terminal=false
 Type=Application
+NoDisplay=true

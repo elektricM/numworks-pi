@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=OpenTTD
+Exec=nw-game openttd
+Icon=openttd
+Terminal=false
+Type=Application

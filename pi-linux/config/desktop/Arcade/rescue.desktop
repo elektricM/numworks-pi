@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Mr. Rescue
+Exec=nw-game rescue
+Icon=love-app
+Terminal=false
+Type=Application

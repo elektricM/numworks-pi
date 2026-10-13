@@ -86,23 +86,58 @@ echo ""
 echo "--- Installing games ---"
 apt-get install -y --no-install-recommends chocolate-doom freedoom ltris \
     lbreakout2 sgt-puzzles scummvm scummvm-data beneath-a-steel-sky \
-    flight-of-the-amazon-queen
+    flight-of-the-amazon-queen luanti luanti-game-minetest supertux neverball \
+    chromium-bsu mrrescue openttd openttd-opengfx
+# Quake: the engine is free, the data is not. game-data-packager downloads
+# id's freely redistributable shareware episode (quake106.zip, ~9 MB),
+# checks it and packages it as quake-shareware.
+apt-get install -y --no-install-recommends quakespasm game-data-packager lhasa
+if ! dpkg -s quake-shareware >/dev/null 2>&1; then
+    gdp=$(mktemp -d)
+    game-data-packager -d "$gdp" quake && apt-get install -y "$gdp"/quake-shareware_*.deb
+    rm -rf "$gdp"
+fi
 rm -rf /usr/local/share/nw-game
 cp -r "$PI_LINUX/config/games" /usr/local/share/nw-game
 
 # --- Desktop launchers ---
-# Opened with a single OK press (single_click), without pcmanfm's
-# "execute?" prompt (quick_exec)
+# Opened with a single OK press (single_click). libfm asks before running
+# any launcher in the home folder, except a Type=Link shortcut to one under
+# /usr/local/share (or /usr/share): so the launchers go to
+# /usr/local/share/applications and the desktop gets shortcuts to them.
 echo ""
 echo "--- Installing desktop launchers ---"
 DESKTOP_USER=${SUDO_USER:-pi}
 DESKTOP_HOME=$(getent passwd "$DESKTOP_USER" | cut -d: -f6)
-install -d -o "$DESKTOP_USER" -g "$DESKTOP_USER" "$DESKTOP_HOME/Desktop"
-install -m 755 -o "$DESKTOP_USER" -g "$DESKTOP_USER" \
-    "$PI_LINUX"/config/desktop/*.desktop "$DESKTOP_HOME/Desktop/"
-install -d -o "$DESKTOP_USER" -g "$DESKTOP_USER" "$DESKTOP_HOME/Desktop/Puzzles"
-install -m 755 -o "$DESKTOP_USER" -g "$DESKTOP_USER" \
-    "$PI_LINUX"/config/desktop/Puzzles/*.desktop "$DESKTOP_HOME/Desktop/Puzzles/"
+APPS=/usr/local/share/applications
+install -d "$APPS"
+# Drop earlier copies of our launchers (they may have moved between folders)
+for entry in "$PI_LINUX"/config/desktop/*.desktop "$PI_LINUX"/config/desktop/*/*.desktop; do
+    name=$(basename "$entry")
+    rm -f "$DESKTOP_HOME/Desktop/$name" "$DESKTOP_HOME"/Desktop/*/"$name"
+done
+for entry in "$PI_LINUX"/config/desktop/*.desktop "$PI_LINUX"/config/desktop/*/*.desktop; do
+    rel=${entry#"$PI_LINUX/config/desktop/"}
+    dir=$(dirname "$rel")
+    name=$(basename "$entry")
+    # Minecraft Pi Reborn is installed by hand (/opt/minecraft-pi)
+    if [ "$name" = minecraft.desktop ] && [ ! -d /opt/minecraft-pi ]; then
+        continue
+    fi
+    install -m 644 "$entry" "$APPS/nw-$name"
+    target="$DESKTOP_HOME/Desktop"
+    [ "$dir" = . ] || target="$target/$dir"
+    install -d -o "$DESKTOP_USER" -g "$DESKTOP_USER" "$target"
+    {
+        echo "[Desktop Entry]"
+        echo "Type=Link"
+        grep -m1 '^Name=' "$entry"
+        grep -m1 '^Icon=' "$entry"
+        echo "URL=$APPS/nw-$name"
+    } > "$target/$name"
+    chown "$DESKTOP_USER:$DESKTOP_USER" "$target/$name"
+    chmod 644 "$target/$name"
+done
 LIBFM="$DESKTOP_HOME/.config/libfm/libfm.conf"
 if [ -f "$LIBFM" ]; then
     sed -i 's/^single_click=.*/single_click=1/; s/^quick_exec=.*/quick_exec=1/' "$LIBFM"

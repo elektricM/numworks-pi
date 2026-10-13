@@ -4,3 +4,4 @@ Exec=sgt-towers
 Icon=sgt-towers
 Terminal=false
 Type=Application
+NoDisplay=true

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Chromium BSU
+Exec=nw-game shooter
+Icon=chromium-bsu
+Terminal=false
+Type=Application

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Luanti
+Exec=nw-game luanti
+Icon=luanti
+Terminal=false
+Type=Application

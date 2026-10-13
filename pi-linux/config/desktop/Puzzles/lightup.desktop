@@ -4,3 +4,4 @@ Exec=sgt-lightup
 Icon=sgt-lightup
 Terminal=false
 Type=Application
+NoDisplay=true

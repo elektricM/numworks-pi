@@ -4,3 +4,4 @@ Exec=sgt-unequal
 Icon=sgt-unequal
 Terminal=false
 Type=Application
+NoDisplay=true

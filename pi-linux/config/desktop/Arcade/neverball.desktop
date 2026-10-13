@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Neverball
+Exec=nw-game neverball
+Icon=neverball
+Terminal=false
+Type=Application

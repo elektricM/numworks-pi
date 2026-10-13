@@ -1,12 +1,14 @@
 #!/bin/sh
 # nw-game GAME: start a game set up for the calculator keyboard and screen.
-# GAME is doom, tetris, breakout, sky or queen.
+# GAME is doom, tetris, breakout, sky, queen, luanti, supertux, neverball,
+# shooter, rescue, openttd or quake.
 #
 # Keyboard mode (Power toggles mouse mode): arrows are arrows, OK is Enter
 # and Back is Escape. The ScummVM games are played in mouse mode.
 
 # Native Wayland (not XWayland); the Pi has no sound card
 export SDL_VIDEODRIVER=wayland SDL_AUDIODRIVER=dummy
+XDISPLAY=${DISPLAY:-:0}
 unset DISPLAY
 
 CONF=/usr/local/share/nw-game
@@ -34,7 +36,30 @@ sky)
 queen)
 	exec /usr/games/scummvm -f --stretch-mode=fit --aspect-ratio \
 		-p /usr/share/scummvm/flight-of-the-amazon-queen queen ;;
+luanti)
+	# Debian's Luanti only has an X11 window: it runs on XWayland
+	seed luanti/minetest.conf "$HOME/.minetest/minetest.conf"
+	world="$HOME/.minetest/worlds/Calculator"
+	if [ ! -e "$world/world.mt" ]; then
+		mkdir -p "$world"
+		printf 'gameid = minetest\nbackend = sqlite3\nplayer_backend = sqlite3\nauth_backend = sqlite3\nenable_damage = true\n' \
+			> "$world/world.mt"
+	fi
+	DISPLAY=$XDISPLAY exec /usr/games/luanti --go --world "$world" ;;
+supertux)
+	exec /usr/games/supertux2 ;;
+neverball)
+	exec /usr/games/neverball ;;
+shooter)
+	exec /usr/games/chromium-bsu ;;
+rescue)
+	exec /usr/games/mrrescue ;;
+openttd)
+	exec /usr/games/openttd ;;
+quake)
+	# Shareware episode from game-data-packager (quake-shareware)
+	exec /usr/games/quakespasm -basedir /usr/share/games/quake -fullscreen -current ;;
 *)
-	echo "usage: nw-game doom|tetris|breakout|sky|queen" >&2
+	echo "usage: nw-game doom|tetris|breakout|sky|queen|luanti|supertux|neverball|shooter|rescue|openttd|quake" >&2
 	exit 2 ;;
 esac

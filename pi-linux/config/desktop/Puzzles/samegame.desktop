@@ -4,3 +4,4 @@ Exec=sgt-samegame
 Icon=sgt-samegame
 Terminal=false
 Type=Application
+NoDisplay=true
