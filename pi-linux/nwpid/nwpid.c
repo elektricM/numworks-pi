@@ -27,6 +27,7 @@
 #include <termios.h>
 #include <sys/stat.h>
 #include <grp.h>
+#include <time.h>
 
 #define DEFAULT_TTY "/dev/ttyS0"
 #define MOUSE_INTERVAL_MS 8
@@ -44,6 +45,22 @@ static int ctl_fd = -1;
 
 enum dsp_state { DSP_LEGACY, DSP_ENABLING, DSP_V2 };
 static enum dsp_state dsp_state = DSP_LEGACY;
+
+/* DSP:ON or its OK can be lost on the UART. Until the OK arrives the driver
+ * sends legacy frames that the calculator (already in protocol 2) drops, so
+ * the screen freezes: resend DSP:ON until it answers. */
+#define DSP_RETRY_MS 300
+#define DSP_MAX_TRIES 10
+static int dsp_tries;
+static long long dsp_retry_at;
+
+static long long now_ms(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000;
+}
 
 /* Send a response over UART: CMD:PAYLOAD\n */
 /*
@@ -152,6 +169,8 @@ static void dsp_handle(const char *payload)
 			return;
 		}
 		dsp_state = DSP_ENABLING;
+		dsp_tries = 1;
+		dsp_retry_at = now_ms() + DSP_RETRY_MS;
 		nwpid_send(CMD_DSP, "ON");
 	} else if (strcmp(payload, "OK") == 0 && dsp_state == DSP_ENABLING) {
 		if (!set_driver_protocol(2)) {
@@ -163,6 +182,24 @@ static void dsp_handle(const char *payload)
 		driver_repaint();	/* first frame in protocol 2 */
 		fprintf(stderr, "Display protocol 2 active\n");
 	}
+}
+
+/* No OK yet: send DSP:ON again, or give up (the calculator left the Pi
+ * app; it sends DSP:2 when it comes back) */
+static void dsp_retry(void)
+{
+	if (dsp_state != DSP_ENABLING || now_ms() < dsp_retry_at)
+		return;
+	if (dsp_tries >= DSP_MAX_TRIES) {
+		fprintf(stderr, "No reply to DSP:ON after %d tries, staying on legacy\n",
+			dsp_tries);
+		dsp_state = DSP_LEGACY;
+		return;
+	}
+	dsp_tries++;
+	dsp_retry_at = now_ms() + DSP_RETRY_MS;
+	fprintf(stderr, "No reply to DSP:ON, resending (try %d)\n", dsp_tries);
+	nwpid_send(CMD_DSP, "ON");
 }
 
 static void dsp_disable(void)
@@ -354,6 +391,12 @@ static void main_loop(void)
 
 	while (1) {
 		int timeout_ms = keyboard_arrows_held() ? MOUSE_INTERVAL_MS : -1;
+		if (dsp_state == DSP_ENABLING) {
+			long long left = dsp_retry_at - now_ms();
+			int dsp_ms = left > 0 ? (int)left : 0;
+			if (timeout_ms < 0 || dsp_ms < timeout_ms)
+				timeout_ms = dsp_ms;
+		}
 		int ret = poll(pfds, ctl_fd >= 0 ? 2 : 1, timeout_ms);
 
 		if (ret > 0 && (pfds[1].revents & POLLIN))
@@ -379,6 +422,7 @@ static void main_loop(void)
 
 		if (ret == 0 && keyboard_arrows_held())
 			keyboard_emit_mouse();
+		dsp_retry();
 	}
 }
 
