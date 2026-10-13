@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Towers
+Exec=sgt-towers
+Icon=sgt-towers
+Terminal=false
+Type=Application

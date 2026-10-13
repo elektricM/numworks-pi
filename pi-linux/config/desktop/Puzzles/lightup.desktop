@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Light Up
+Exec=sgt-lightup
+Icon=sgt-lightup
+Terminal=false
+Type=Application

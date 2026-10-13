@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Breakout
+Exec=nw-game breakout
+Icon=lbreakouthd
+Terminal=false
+Type=Application

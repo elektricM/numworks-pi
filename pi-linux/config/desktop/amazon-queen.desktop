@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Amazon Queen
+Exec=nw-game queen
+Icon=flight-of-the-amazon-queen
+Terminal=false
+Type=Application

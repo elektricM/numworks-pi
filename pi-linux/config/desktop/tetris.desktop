@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Tetris
+Exec=nw-game tetris
+Icon=ltris2
+Terminal=false
+Type=Application

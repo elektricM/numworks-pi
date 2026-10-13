@@ -1,0 +1,40 @@
+#!/bin/sh
+# nw-game GAME: start a game set up for the calculator keyboard and screen.
+# GAME is doom, tetris, breakout, sky or queen.
+#
+# Keyboard mode (Power toggles mouse mode): arrows are arrows, OK is Enter
+# and Back is Escape. The ScummVM games are played in mouse mode.
+
+# Native Wayland (not XWayland); the Pi has no sound card
+export SDL_VIDEODRIVER=wayland SDL_AUDIODRIVER=dummy
+unset DISPLAY
+
+CONF=/usr/local/share/nw-game
+
+# Copy a default config into place unless the user already has one
+seed() {
+	[ -e "$2" ] && return
+	mkdir -p "$(dirname "$2")"
+	cp "$CONF/$1" "$2"
+}
+
+case "$1" in
+doom)
+	seed chocolate-doom/default.cfg "$HOME/.local/share/chocolate-doom/default.cfg"
+	seed chocolate-doom/chocolate-doom.cfg "$HOME/.local/share/chocolate-doom/chocolate-doom.cfg"
+	exec /usr/games/chocolate-doom -iwad /usr/share/games/doom/freedoom1.wad ;;
+tetris)
+	seed ltris2.conf "$HOME/.local/share/ltris2/ltris2.conf"
+	exec /usr/games/ltris2 ;;
+breakout)
+	exec /usr/games/lbreakout2 ;;
+sky)
+	exec /usr/games/scummvm -f --stretch-mode=fit --aspect-ratio \
+		-p /usr/share/scummvm/beneath-a-steel-sky sky ;;
+queen)
+	exec /usr/games/scummvm -f --stretch-mode=fit --aspect-ratio \
+		-p /usr/share/scummvm/flight-of-the-amazon-queen queen ;;
+*)
+	echo "usage: nw-game doom|tetris|breakout|sky|queen" >&2
+	exit 2 ;;
+esac

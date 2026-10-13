@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Doom
+Exec=nw-game doom
+Icon=io.github.freedoom.Phase1
+Terminal=false
+Type=Application

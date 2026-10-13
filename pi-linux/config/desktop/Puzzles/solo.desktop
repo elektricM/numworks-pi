@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Sudoku
+Exec=sgt-solo
+Icon=sgt-solo
+Terminal=false
+Type=Application

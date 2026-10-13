@@ -76,8 +76,19 @@ apt-get install -y python3-picamera2 python3-pygame
 for app in "$PI_LINUX"/apps/*/; do
     name=$(basename "$app")
     install -m 755 "$app/$name" "/usr/local/bin/$name"
-    cp "$app"/*.desktop /usr/share/applications/
+    for entry in "$app"/*.desktop; do
+        [ -e "$entry" ] && cp "$entry" /usr/share/applications/
+    done
 done
+
+# --- Games (started through nw-game) ---
+echo ""
+echo "--- Installing games ---"
+apt-get install -y --no-install-recommends chocolate-doom freedoom ltris \
+    lbreakout2 sgt-puzzles scummvm scummvm-data beneath-a-steel-sky \
+    flight-of-the-amazon-queen
+rm -rf /usr/local/share/nw-game
+cp -r "$PI_LINUX/config/games" /usr/local/share/nw-game
 
 # --- Desktop launchers ---
 # Opened with a single OK press (single_click), without pcmanfm's
@@ -89,6 +100,9 @@ DESKTOP_HOME=$(getent passwd "$DESKTOP_USER" | cut -d: -f6)
 install -d -o "$DESKTOP_USER" -g "$DESKTOP_USER" "$DESKTOP_HOME/Desktop"
 install -m 755 -o "$DESKTOP_USER" -g "$DESKTOP_USER" \
     "$PI_LINUX"/config/desktop/*.desktop "$DESKTOP_HOME/Desktop/"
+install -d -o "$DESKTOP_USER" -g "$DESKTOP_USER" "$DESKTOP_HOME/Desktop/Puzzles"
+install -m 755 -o "$DESKTOP_USER" -g "$DESKTOP_USER" \
+    "$PI_LINUX"/config/desktop/Puzzles/*.desktop "$DESKTOP_HOME/Desktop/Puzzles/"
 LIBFM="$DESKTOP_HOME/.config/libfm/libfm.conf"
 if [ -f "$LIBFM" ]; then
     sed -i 's/^single_click=.*/single_click=1/; s/^quick_exec=.*/quick_exec=1/' "$LIBFM"

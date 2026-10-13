@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Flood
+Exec=sgt-flood
+Icon=sgt-flood
+Terminal=false
+Type=Application

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Fifteen
+Exec=sgt-fifteen
+Icon=sgt-fifteen
+Terminal=false
+Type=Application

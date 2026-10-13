@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Same Game
+Exec=sgt-samegame
+Icon=sgt-samegame
+Terminal=false
+Type=Application

@@ -85,6 +85,20 @@ static uint64_t old_scan = 0;
 static int mode = 0;
 static struct timespec mouse_start;
 static int mouse_active = 0;
+/* Code each key sent when pressed, so its release matches even if the mode
+ * changed while it was held */
+static int pressed_code[NUM_KEYS];
+
+/* Keyboard mode (mouse mode off): OK and Back are Enter and Escape, which
+ * games and menus need; in mouse mode they stay the two buttons */
+static int key_code(int bit)
+{
+	if (!mouse_mode && keymap[bit].code[mode] == BTN_LEFT)
+		return KEY_ENTER;
+	if (!mouse_mode && keymap[bit].code[mode] == BTN_RIGHT)
+		return KEY_ESC;
+	return keymap[bit].code[mode];
+}
 
 static void emit(int type, int code, int val)
 {
@@ -201,8 +215,9 @@ void keyboard_handle(const char *payload)
 	else if (scan & (1ULL << 15))
 		mode = 1;
 
-	/* In mouse mode, skip arrow bits (0-3) */
-	uint64_t key_changes = mouse_mode ? (changed & ~0xFULL) : changed;
+	/* In mouse mode, arrow bits (0-3) move the cursor, except the release
+	 * of an arrow pressed as a key before mouse mode came on */
+	uint64_t key_changes = changed;
 	int emitted = 0;
 
 	while (key_changes) {
@@ -210,9 +225,20 @@ void keyboard_handle(const char *payload)
 		key_changes &= key_changes - 1;
 
 		if (bit == 7 || bit >= NUM_KEYS) continue;
-		if (keymap[bit].code[mode] == 0) continue;
+		if (mouse_mode && bit < 4 &&
+		    ((scan & (1ULL << bit)) || !pressed_code[bit]))
+			continue;
 
-		emit(EV_KEY, keymap[bit].code[mode], (scan & (1ULL << bit)) ? 1 : 0);
+		int code;
+		if (scan & (1ULL << bit)) {
+			code = pressed_code[bit] = key_code(bit);
+		} else {
+			code = pressed_code[bit] ? pressed_code[bit] : key_code(bit);
+			pressed_code[bit] = 0;
+		}
+		if (code == 0) continue;
+
+		emit(EV_KEY, code, (scan & (1ULL << bit)) ? 1 : 0);
 		emitted = 1;
 	}
 

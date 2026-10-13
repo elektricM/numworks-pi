@@ -1,6 +1,7 @@
 # NumWorks Pi Keyboard Map
 
 Power button toggles between **Keyboard** and **Mouse** mode.
+In keyboard mode OK is Enter and Back is Escape (what games and menus need); in mouse mode they are the left and right buttons.
 `xnt` key activates Mode 0. `var` key activates Mode 1.
 Shift (calculator Shift key) modifies keys — shown as `key / Shift+key` where applicable.
 
@@ -11,7 +12,7 @@ Shift (calculator Shift key) modifies keys — shown as `key / Shift+key` where 
 ```
  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
  │  ←   │ │  ↑   │ │  ↓   │ │  →   │ │  OK  │ │ Back │
- │ LEFT │ │  UP  │ │ DOWN │ │RIGHT │ │L-CLK │ │R-CLK │
+ │ LEFT │ │  UP  │ │ DOWN │ │RIGHT │ │ENTER │ │ ESC  │
  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘
 
  ┌──────┐                                      ┌──────┐
@@ -62,7 +63,7 @@ Shift (calculator Shift key) modifies keys — shown as `key / Shift+key` where 
 ```
  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
  │  ←   │ │  ↑   │ │  ↓   │ │  →   │ │  OK  │ │ Back │
- │ LEFT │ │  UP  │ │ DOWN │ │RIGHT │ │L-CLK │ │R-CLK │
+ │ LEFT │ │  UP  │ │ DOWN │ │RIGHT │ │ENTER │ │ ESC  │
  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘
 
  ┌──────┐                                      ┌──────┐

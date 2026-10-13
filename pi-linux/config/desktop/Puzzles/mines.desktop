@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Mines
+Exec=sgt-mines
+Icon=sgt-mines
+Terminal=false
+Type=Application

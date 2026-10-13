@@ -119,7 +119,7 @@ See [zardam's original blog post](https://zardam.github.io/post/raspberrypi-numw
 - [Getting Started](docs/getting-started.md) — full setup walkthrough
 - [Performance Investigation](docs/performance-investigation.md) — FPS analysis, SPI optimization, NEON experiments
 - [Keyboard Map](docs/keymap.md) — full key mapping reference (modes, mouse, special characters)
-- [Running Doom](docs/doom.md) — Chocolate Doom setup and controls
+- [Games](docs/games.md) — Doom, Tetris, Breakout, two ScummVM adventures and puzzles, with controls
 - [Firmware Build Guide](docs/firmware/build-guide.md) — build, flash, build flags
 - [Firmware Porting Notes](docs/firmware/porting-notes.md) — differences from zardam's epsilon
 - [UART Fix](docs/firmware/uart-fix.md) — consoleuart + USART3 clock fix
