@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Display
+Comment=Desktop size and text size
+Exec=nw-resolution
+Icon=preferences-desktop-display
+Terminal=false
+Type=Application

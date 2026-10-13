@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Terminal
+Exec=lxterminal
+Icon=lxterminal
+Terminal=false
+Type=Application

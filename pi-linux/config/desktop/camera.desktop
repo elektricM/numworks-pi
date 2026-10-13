@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Camera
+Exec=nw-camera
+Icon=camera-photo
+Terminal=false
+Type=Application

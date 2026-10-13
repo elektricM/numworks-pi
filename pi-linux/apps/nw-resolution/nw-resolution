@@ -1,25 +1,81 @@
 #!/bin/bash
-# NumWorks display text size switcher
-# Uses GTK text-scaling-factor for zero-cost readability adjustment
-# (wlr-randr fractional scales halve FPS on Pi Zero 2W — avoid them)
+# NumWorks "Display" settings: desktop size and text size.
+#
+# The panel is always 320x240; the desktop is drawn at 1.5x, 2x, 2.5x or 3x
+# that and the driver (drm-spifb) downscales it. A bigger desktop fits more
+# (dialogs that are too tall for 640x480), a smaller one is sharper and costs
+# the compositor and apps less. The choice is applied at once with wlr-randr
+# and kept in kanshi's config, which labwc's autostart runs at login.
+#
+# Text size uses GTK's text-scaling-factor, which costs nothing per frame
+# (wlr-randr fractional scales halve the frame rate on a Pi Zero 2 W).
 
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
 export GSK_RENDERER=cairo
 
-current=$(gsettings get org.gnome.desktop.interface text-scaling-factor)
+KANSHI_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/kanshi/config"
 
-choice=$(zenity --list \
-    --title="Display Text Size" \
-    --text="Current: ${current}x\nSelect text size:" \
-    --column="Scale" --column="Description" \
-    "1.0" "Small" \
-    "1.25" "Medium (default)" \
-    "1.5" "Large" \
-    "2.0" "Extra Large" \
-    --width=300 --height=280 2>/dev/null)
+# The calculator's output and its current mode, from wlr-randr
+output=$(wlr-randr | awk '/^[^ ]/ { name = $1 } /SPI/ && !found { print name; found = 1 }')
+output=${output:-SPI-1}
+current=$(wlr-randr | awk '/current/ { print $1; exit }')
 
-if [ -n "$choice" ]; then
-    gsettings set org.gnome.desktop.interface text-scaling-factor "$choice"
+row() {	# size, description
+	if [ "$1" = "$current" ]; then
+		printf '%s\n%s\n' "$1" "$2 (current)"
+	else
+		printf '%s\n%s\n' "$1" "$2"
+	fi
+}
+
+choice=$( {
+	row 480x360 "Sharpest and fastest; big windows may not fit"
+	row 640x480 "Default"
+	row 800x600 "More room"
+	row 960x720 "Most room, smallest text"
+	printf '%s\n%s\n' "Text..." "Change the text size instead"
+} | zenity --list --title="Display" \
+	--text="Desktop size (the screen itself stays 320x240):" \
+	--column="Size" --column="" --width=300 --height=270 2>/dev/null)
+
+case "$choice" in
+"")
+	exit 0
+	;;
+Text...)
+	scale=$(gsettings get org.gnome.desktop.interface text-scaling-factor)
+	choice=$(zenity --list --title="Text size" \
+		--text="Current: ${scale}x" \
+		--column="Scale" --column="" \
+		"1.0" "Small" \
+		"1.25" "Medium (default)" \
+		"1.5" "Large" \
+		"2.0" "Extra large" \
+		--width=300 --height=270 2>/dev/null)
+	[ -n "$choice" ] && gsettings set org.gnome.desktop.interface text-scaling-factor "$choice"
+	exit 0
+	;;
+esac
+
+[ "$choice" = "$current" ] && exit 0
+if ! wlr-randr --output "$output" --mode "$choice"; then
+	zenity --error --text="Could not switch to $choice" --width=250 2>/dev/null
+	exit 1
 fi
+
+mkdir -p "$(dirname "$KANSHI_CONFIG")"
+# Write a temporary file and rename it: the Pi runs on the calculator's
+# battery and a power cut mid-write left an empty config behind
+cat > "$KANSHI_CONFIG.tmp" <<EOF
+# Written by the Display app (nw-resolution)
+profile {
+	output $output mode $choice
+}
+EOF
+sync "$KANSHI_CONFIG.tmp"
+mv -f "$KANSHI_CONFIG.tmp" "$KANSHI_CONFIG"
+# A running kanshi re-reads its config on SIGHUP
+pkill -HUP -x kanshi 2>/dev/null
+exit 0

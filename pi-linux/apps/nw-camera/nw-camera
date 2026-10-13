@@ -1,5 +1,206 @@
-#!/bin/bash
-# NumWorks camera - rpicam viewfinder with full ISP processing
-# --denoise cdn_fast: fast colour denoise (better quality, low overhead)
-# --awb auto: auto white balance
-rpicam-hello -t 0 --denoise cdn_fast --awb auto
+#!/usr/bin/env python3
+# NumWorks camera - full-screen viewfinder + photo capture for the OV5647.
+#
+# The camera sits sideways in the calculator, and the Pi ISP can only flip
+# (0/180), not rotate 90. So the ISP flips, and pygame transposes when it
+# blits (surfarray is indexed [x][y]); flip + transpose = 90 degree rotation
+# with no per-pixel work in Python.
+#
+# Keys: EXE / Space / OK-click = take photo, Back / Backspace / Esc = quit,
+# Up / Down = turn the picture 180 degrees (remembered for next time).
+# Photos go to ~/Pictures/Camera, cropped and rotated exactly as previewed.
+
+import argparse
+import os
+import sys
+import time
+
+import pygame
+from libcamera import Transform
+from PIL import Image
+from picamera2 import Picamera2
+
+# Degrees clockwise to rotate the sensor image so "up" is up on screen. It
+# once looked upside down at 90 with nothing changed (2026-10-13), so Up/Down
+# flips it in the app and the choice is kept in ROTATION_FILE.
+DEFAULT_ROTATION = 90
+ROTATION_FILE = os.path.expanduser("~/.config/nw-camera/rotation")
+
+# The preview is drawn at the panel's own size whatever the desktop mode, and
+# SDL scales it to the window: a quarter of the pixels through Python that a
+# 640x480 desktop would cost, for the same picture on the calculator.
+VIEW = (320, 240)
+
+PHOTO_DIR = os.path.expanduser("~/Pictures/Camera")
+HINT = "EXE: photo   Up: flip   Back: quit"
+
+
+def orientation(rotation):
+	"""ISP transform + whether to transpose, for a clockwise rotation."""
+	return {
+		0: (Transform(), False),
+		90: (Transform(vflip=1), True),
+		180: (Transform(hflip=1, vflip=1), False),
+		270: (Transform(hflip=1), True),
+	}[rotation]
+
+
+def fit_crop(max_crop, aspect):
+	"""Largest centred rect of width/height `aspect` inside max_crop."""
+	x0, y0, w, h = max_crop
+	if w / h > aspect:
+		cw, ch = round(h * aspect), h
+	else:
+		cw, ch = w, round(w / aspect)
+	return (x0 + (w - cw) // 2, y0 + (h - ch) // 2, cw, ch)
+
+
+def load_rotation():
+	try:
+		with open(ROTATION_FILE) as f:
+			rotation = int(f.read())
+		if rotation in (0, 90, 180, 270):
+			return rotation
+	except (OSError, ValueError):
+		pass
+	return DEFAULT_ROTATION
+
+
+def save_rotation(rotation):
+	# Temporary file + rename: the Pi can lose power at any moment
+	try:
+		os.makedirs(os.path.dirname(ROTATION_FILE), exist_ok=True)
+		with open(ROTATION_FILE + ".tmp", "w") as f:
+			f.write("%d\n" % rotation)
+		os.replace(ROTATION_FILE + ".tmp", ROTATION_FILE)
+	except OSError:
+		pass
+
+
+def to_surface_array(frame, transpose):
+	# surfarray wants [x][y]; a camera frame is [row][col].
+	return frame if transpose else frame.swapaxes(0, 1)
+
+
+def main():
+	parser = argparse.ArgumentParser(description="NumWorks camera")
+	parser.add_argument("--rotate", type=int, choices=(0, 90, 180, 270),
+	                    help="clockwise rotation (default: the last one used, "
+	                         "else %d)" % DEFAULT_ROTATION)
+	parser.add_argument("--tuning", default=None,
+	                    help="libcamera tuning file, e.g. ov5647_noir.json "
+	                         "for a module without an IR filter")
+	args = parser.parse_args()
+	rotation = load_rotation() if args.rotate is None else args.rotate
+	transpose = orientation(rotation)[1]
+
+	pygame.init()
+	screen = pygame.display.set_mode(VIEW, pygame.FULLSCREEN | pygame.SCALED)
+	pygame.mouse.set_visible(False)
+	sw, sh = screen.get_size()
+	font = pygame.font.Font(None, 18)
+
+	# Stream size and crop aspect are in sensor orientation.
+	stream_size = (sh, sw) if transpose else (sw, sh)
+	aspect = stream_size[0] / stream_size[1]
+
+	tuning = Picamera2.load_tuning_file(args.tuning) if args.tuning else None
+	picam2 = Picamera2(tuning=tuning)
+	binned = next(m for m in picam2.sensor_modes if m["size"] == (1296, 972))
+	full = max(picam2.sensor_modes, key=lambda m: m["size"][0])
+
+	def configs(rotation):
+		"""Configure the preview for @rotation; returns (preview, still)."""
+		transform = orientation(rotation)[0]
+		preview = picam2.create_preview_configuration(
+			main={"size": stream_size, "format": "BGR888"},  # RGB byte order
+			sensor={"output_size": binned["size"], "bit_depth": binned["bit_depth"]},
+			transform=transform,
+			buffer_count=3,
+			controls={
+				# A steady 30 fps: in low light AE raises the gain (more
+				# noise) instead of halving the frame rate.
+				"FrameDurationLimits": (33333, 33333),
+				"NoiseReductionMode": 1,  # Fast
+			})
+		picam2.configure(preview)
+		crop = fit_crop(picam2.camera_controls["ScalerCrop"][1], aspect)
+		preview["controls"]["ScalerCrop"] = crop
+
+		# Full-res stills with the same crop; width aligned for the ISP.
+		still_w = crop[2] // 32 * 32
+		still = picam2.create_still_configuration(
+			main={"size": (still_w, round(still_w / aspect)), "format": "BGR888"},
+			sensor={"output_size": full["size"], "bit_depth": full["bit_depth"]},
+			transform=transform,
+			buffer_count=1,
+			controls={"ScalerCrop": crop, "NoiseReductionMode": 2})  # HighQuality
+
+		picam2.configure(preview)
+		return preview, still
+
+	preview_config, still_config = configs(rotation)
+	picam2.start()
+
+	frame_surface = pygame.Surface((sw, sh))
+	message, message_until = HINT, time.monotonic() + 3
+
+	def take_photo():
+		screen.fill((255, 255, 255))
+		pygame.display.flip()
+		image = picam2.switch_mode_and_capture_image(still_config, "main", delay=2)
+		if transpose:
+			image = image.transpose(Image.Transpose.TRANSPOSE)
+		os.makedirs(PHOTO_DIR, exist_ok=True)
+		name = time.strftime("IMG_%Y%m%d_%H%M%S.jpg")
+		image.save(os.path.join(PHOTO_DIR, name), quality=92)
+		return name
+
+	running = True
+	while running:
+		for event in pygame.event.get():
+			shoot = False
+			if event.type == pygame.QUIT:
+				running = False
+			elif event.type == pygame.KEYDOWN:
+				if event.key in (pygame.K_BACKSPACE, pygame.K_ESCAPE, pygame.K_q):
+					running = False
+				elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+					shoot = True
+				elif event.key in (pygame.K_UP, pygame.K_DOWN):
+					# The sensor does the flip, so it needs a reconfigure
+					rotation = (rotation + 180) % 360
+					save_rotation(rotation)
+					picam2.stop()
+					preview_config, still_config = configs(rotation)
+					picam2.start()
+					message, message_until = "Turned 180", time.monotonic() + 1
+			elif event.type == pygame.MOUSEBUTTONDOWN:
+				if event.button == 3:
+					running = False
+				elif event.button == 1:
+					shoot = True
+			if shoot and running:
+				try:
+					message = "Saved " + take_photo()
+				except Exception as e:
+					message = "Photo failed: %s" % e
+				message_until = time.monotonic() + 2
+
+		frame = picam2.capture_array("main")
+		pygame.surfarray.blit_array(frame_surface, to_surface_array(frame, transpose))
+		screen.blit(frame_surface, (0, 0))
+		if time.monotonic() < message_until:
+			text = font.render(message, True, (255, 255, 255))
+			box = text.get_rect(midbottom=(sw // 2, sh - 8)).inflate(12, 6)
+			pygame.draw.rect(screen, (0, 0, 0), box)
+			screen.blit(text, text.get_rect(center=box.center))
+		pygame.display.flip()
+
+	picam2.stop()
+	picam2.close()
+	pygame.quit()
+
+
+if __name__ == "__main__":
+	sys.exit(main())

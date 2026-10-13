@@ -2,8 +2,8 @@
 # Full Pi setup for NumWorks calculator integration
 # Run on the Pi after cloning the repo: sudo ./pi-linux/scripts/setup.sh
 #
-# If a kernel upgrade happens during apt, the script will ask you to
-# reboot and re-run it so the driver builds against the new kernel.
+# The display driver is installed with DKMS, so it is rebuilt for every
+# kernel that apt installs, now or later.
 #
 # Safe to run multiple times — idempotent operations.
 set -e
@@ -26,62 +26,18 @@ echo ""
 
 # --- System update ---
 echo "--- Updating system ---"
-KERNEL_BEFORE=$(uname -r)
 apt-get update
 apt-get full-upgrade -y
-
-# Check if a new kernel was installed for our architecture
-NEW_KERNEL=$(ls -1d /lib/modules/*-v7* 2>/dev/null | sort -V | tail -1 | xargs basename 2>/dev/null || true)
-if [ -n "$NEW_KERNEL" ] && [ "$NEW_KERNEL" != "$KERNEL_BEFORE" ]; then
-    echo ""
-    echo "*** Kernel upgraded: $KERNEL_BEFORE -> $NEW_KERNEL ***"
-    echo "*** Reboot and re-run this script to build against the new kernel. ***"
-    echo ""
-    echo "  sudo reboot"
-    echo "  # after reboot:"
-    echo "  sudo bash ~/numworks-pi/pi-linux/scripts/setup.sh"
-    exit 0
-fi
 
 # --- Build dependencies ---
 echo ""
 echo "--- Installing build dependencies ---"
-apt-get install -y linux-headers-$(uname -r) build-essential mesa-utils
+# The flavour metapackage keeps headers coming with every new kernel (DKMS)
+apt-get install -y "linux-headers-$(uname -r)" \
+    "linux-headers-rpi-$(uname -r | sed 's/.*-//')" build-essential mesa-utils
 
-# --- Display driver ---
-echo ""
-echo "--- Building drm-spifb kernel module ---"
-cd "$PI_LINUX/drm-spifb"
-make
-mkdir -p "/lib/modules/$(uname -r)/extra"
-cp drm-spifb.ko "/lib/modules/$(uname -r)/extra/"
-depmod -a
-
-# --- Device Tree overlay ---
-echo ""
-echo "--- Installing DT overlay ---"
-"$SCRIPT_DIR/install-overlay.sh"
-
-# --- nwpid (NumWorks Pi Daemon) ---
-echo ""
-echo "--- Building and installing nwpid ---"
-cd "$PI_LINUX/nwpid"
-make clean && make
-cp nwpid /usr/local/bin/nwpid
-cp nwpid.service /etc/systemd/system/
-# Disable old nwinput if present
-systemctl disable nwinput 2>/dev/null || true
-systemctl stop nwinput 2>/dev/null || true
-systemctl daemon-reload
-systemctl enable nwpid
-
-# --- Apps ---
-cp "$PI_LINUX/apps/nw-resolution/nw-resolution" /usr/local/bin/nw-resolution
-chmod +x /usr/local/bin/nw-resolution
-cp "$PI_LINUX/apps/nw-resolution/nw-resolution.desktop" /usr/share/applications/
-cp "$PI_LINUX/apps/nw-camera/nw-camera" /usr/local/bin/nw-camera
-chmod +x /usr/local/bin/nw-camera
-cp "$PI_LINUX/apps/nw-camera/nw-camera.desktop" /usr/share/applications/
+# --- Driver, overlay, nwpid, apps ---
+"$SCRIPT_DIR/install-components.sh"
 
 # --- Boot config ---
 echo ""
@@ -100,10 +56,18 @@ else
     echo "config.txt already configured"
 fi
 
-# config.txt: add camera overlay (idempotent)
-if ! grep -q '^dtoverlay=ov9281' /boot/firmware/config.txt; then
-    echo 'dtoverlay=ov9281' >> /boot/firmware/config.txt
-    echo "Added camera overlay to config.txt"
+# config.txt: camera (idempotent). Auto-detect covers the OV5647 and the
+# official modules; the OV9281 needs its overlay: NWPI_CAMERA=ov9281 ./setup.sh
+if [ "${NWPI_CAMERA:-auto}" = "ov9281" ]; then
+    sed -i 's/^camera_auto_detect=1/camera_auto_detect=0/' /boot/firmware/config.txt
+    if ! grep -q '^dtoverlay=ov9281' /boot/firmware/config.txt; then
+        echo 'dtoverlay=ov9281' >> /boot/firmware/config.txt
+        echo "Added OV9281 camera overlay to config.txt"
+    fi
+else
+    sed -i -e 's/^camera_auto_detect=0/camera_auto_detect=1/' \
+           -e 's/^dtoverlay=ov9281/#dtoverlay=ov9281/' /boot/firmware/config.txt
+    echo "Camera auto-detect enabled"
 fi
 
 # cmdline.txt: remove serial console if present

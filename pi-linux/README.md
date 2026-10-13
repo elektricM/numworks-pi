@@ -39,7 +39,8 @@ No init commands, no register writes, no MIPI DBI protocol. Just raw pixels. The
 
 ```
 drm-spifb/                 DRM/KMS tiny driver
-  drm-spifb.c              drm_simple_display_pipe SPI driver (~480 lines)
+  drm-spifb-core.c         drm_simple_display_pipe SPI driver
+  drm-spifb-neon.c         NEON 2:1 downscale (built with the kernel FPU flags)
   Makefile                 Kernel module build
 overlay/
   numworks-spifb.dts       Device Tree overlay for SPI0/CE0 (with vwidth/vheight params)
