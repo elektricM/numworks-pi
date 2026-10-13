@@ -99,7 +99,7 @@ Parameters (speed, width, height, fps) can be overridden from config.txt:
 dtoverlay=numworks-spifb,speed=70000000,width=320,height=240
 ```
 
-## DRM Driver (`drm-spifb/drm-spifb.c`)
+## DRM Driver (`drm-spifb/drm-spifb-core.c`, NEON in `drm-spifb-neon.c`)
 
 A DRM tiny driver following the `repaper.c` pattern:
 
@@ -107,10 +107,11 @@ A DRM tiny driver following the `repaper.c` pattern:
 - **Allocation**: `devm_drm_dev_alloc()` — embedded `struct drm_device` inside `struct nw_spifb`, managed lifetime.
 - **Display pipe**: `drm_simple_display_pipe` — single struct providing CRTC + encoder + plane. Shadow plane (`DRM_GEM_SIMPLE_DISPLAY_PIPE_SHADOW_PLANE_FUNCS`) gives CPU-accessible buffer.
 - **Mode config**: `drm_mode_config_funcs` with `drm_gem_fb_create_with_dirty` (triggers update on userspace writes), `drm_atomic_helper_check`, `drm_atomic_helper_commit`.
-- **Connector**: `DRM_MODE_CONNECTOR_SPI`, single fixed 320x240 mode.
-- **Formats**: `DRM_FORMAT_RGB565` (native, fbcon) and `DRM_FORMAT_XRGB8888` (compositor). Format-aware `send_frame()` picks the right conversion path.
-- **Virtual resolution**: `vwidth`/`vheight` DT properties (default 480x360). Connector advertises virtual resolution; driver downscales to physical before SPI transfer.
-- **Frame send**: `pipe_update()` → reads shadow buffer → format conversion + optional downscale → DMA-coherent TX buffer → `spi_sync()` with 32KB chunks.
+- **Connector**: `DRM_MODE_CONNECTOR_SPI` offering four desktop sizes, 480x360, 640x480, 800x600 and 960x720 (1.5x to 3x the 320x240 panel). The compositor can switch between them at runtime (`wlr-randr --output SPI-1 --mode WxH`, or the Display app). The `vwidth`/`vheight` DT properties pick the preferred one (default 640x480).
+- **Formats**: `DRM_FORMAT_RGB565` (native, fbcon) and `DRM_FORMAT_XRGB8888` (compositor).
+- **Downscale**: an area filter (each output pixel is the coverage-weighted average of the source pixels under it), ordered dither to RGB565. Exact 2:1 (the 640x480 default) has its own path, in NEON when the CPU has it (`simd` parameter, same output), which builds a full frame in about 1.6 ms on the Pi Zero 2 W against 3.7 ms in C.
+- **Frame send**: `pipe_update()` collects the damage clips, merges them into at most 8 rectangles, rebuilds only those, and sends them as one asynchronous SPI message (protocol 2: header plus pixels per rectangle, see `NWPI_PROTOCOL.md`). The next frame is prepared while the previous one is on the wire. The `repaint` parameter resends the whole screen.
+- **Statistics**: `/sys/kernel/debug/dri/1/spifb_stats`.
 - **fbdev emulation**: `drm_fbdev_generic_setup()` provides `/dev/fb0` for legacy apps and fbcon.
 
 ### Differences from zardam's original

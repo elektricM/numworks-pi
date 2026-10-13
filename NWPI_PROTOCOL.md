@@ -160,6 +160,49 @@ P→C: OK:SYS:shutdown in 5s\n
 
 ---
 
+### 4b. Remote reflash (implemented)
+
+| Direction | Message | Meaning |
+|-----------|---------|---------|
+| P→C | `SYS:DFU` | Enter USB DFU so the calculator can be flashed without touching it |
+| C→P | `SYS:DFU` | Acknowledged: the calculator is in DFU. nwpid powers the Pi off, because the reset that ends a flash cuts the Pi's power |
+
+The calculator waits up to 10 s for USB enumeration. If no flash happens (Back key, unplugged, timeout), it waits until 20 s after the request, by which time the Pi has halted, and then power-cycles the Pi. From the Mac, `tools/reflash-n0100.sh` runs the whole sequence: `nwpi-ctl dfu`, wait for the Pi to halt, `dfu-util`. It matches only the N0100's 1 MiB flash map, so an N0110 plugged in alongside is never touched.
+
+### 4c. Display bridge (implemented)
+
+| Direction | Message | Meaning |
+|-----------|---------|---------|
+| C→P | `DSP:2` | Bridge (re)started and supports display protocol 2 (sent on entering the Pi app, and in reply to `DSP:?`) |
+| P→C | `DSP:?` | Ask for the supported protocol |
+| P→C | `DSP:ON` / `DSP:OFF` | Switch protocol 2 on/off; the calculator answers `DSP:OK` |
+| P→C | `DSP:STAT` | Statistics, see below |
+| P→C | `DSP:PX:x,y` | Read 4 landscape pixels back from LCD GRAM: `DSP:PX x,y=RGB565,...` (protocol 2 only) |
+
+**Updates.** In protocol 2, every update is one SPI message of up to 8 rectangles (`NW_MAX_RECTS`). Each rectangle is an 8-word header frame (`0x4E57, 2, MADCTL, c0, c1, p0, p1, 0xFFFF ^ xor(w0..w6)`, big-endian 16-bit words), a CS-high gap, then the pixels of that window only, in the panel's native page order (MADCTL 0x00: column = landscape y, page = 319 − landscape x). Rectangles in the same message are separated by 10 µs of CS high, and so are consecutive messages. The driver turns the compositor's damage clips into rectangles and merges overlapping ones. If more than 8 remain, or they would cost more than their bounding box, it sends the bounding box instead.
+
+**The header gap** is the time the calculator has, after the header's CS rise, to check it, choose a refresh rate, and program the LCD window and DMA before the first pixel arrives. The driver's `header_gap_us` defaults to 40 (maximum 60); the calculator measures it as `gap_us` (about 43). The gap must be spun, not slept. The SPI core spins only for `cs_change_delay` ≤ 10 µs and sleeps for anything longer, and those sleeps measured 66–103 µs for a nominal 40, which threw off the calculator's tear timing. So the driver uses 10 µs of `cs_change_delay`, then chains empty `cs_off` transfers of ≤ 10 µs `delay` each for the rest. If pixels arrive before the calculator is ready, the SPI overruns and `late` counts it; it should stay at 0.
+
+**Tearing.** The calculator timestamps the LCD's tearing-effect line and, for each update, sets the panel refresh rate (FRCTRL2 RTNA, 4–30, about 90–40 Hz) so the scan never crosses the write. It aims for a line time equal to this rectangle's page write time: a pass can only tear if it starts within (pages − 1) × |line time − page time| of the write, so equal speeds never tear. If no rate in range avoids it, the update is counted as `torn`. Typical figures at 640×480: no torn full frames, and about 2% of small updates with `top` running.
+
+**Recovery.** Entering the Pi app re-initialises the bridge from scratch: SPI1 GPIO alternate functions, a peripheral reset of SPI1 (only an RCC reset restarts the slave's bit count; one stray clock edge otherwise misaligns every later frame), DMA, and the CS interrupt. The SPI is also reset between every header and pixel frame. The calculator then sends `DSP:2`. nwpid switches protocol 2 back on (`DSP:ON`) and, on `DSP:OK`, writes `1` to the driver's `repaint` parameter (`/sys/module/drm_spifb/parameters/repaint`), so the whole desktop is resent at once instead of staying grey until something moves. With the legacy protocol it repaints straight away.
+
+Switching order avoids showing garbage. Going up, the calculator switches first and drops legacy frames as bad headers until the driver follows. Going down, the driver switches first. nwpid does this automatically. `touch /etc/nwpi/display-legacy` keeps the legacy protocol.
+
+**Statistics** (`nwpi-ctl stat`; they survive Upsilon's power-off, which is a sleep, and clear only on reset or reflash):
+
+```
+DSP:STAT frames= bad= rtna= switches= torn= isr_us= px_ns= gap_us= osc_pm= late= HHHH.HHHH.HHHH.HHHH.HHHH.HHHH.HHHH.HHHH.NNNN
+```
+
+`frames` pixel frames received; `bad` rejected headers; `rtna` the current refresh setting and `switches` how often it changed; `torn` updates no refresh rate could keep tear-free; `isr_us` the longest CS interrupt; `px_ns` measured time per pixel on the wire; `gap_us` measured header gap; `osc_pm` the panel oscillator calibration in per mille; `late` pixel frames that overran the SPI. The last field is the last rejected header (8 words) and the DMA count left (`NNNN`, 0 when all 8 words arrived), for diagnosing a bad link. `bad` rises by a few while the Pi boots or the driver reloads; if it climbs during normal use, check the MOSI wire (see `docs/pi-setup/handoff-2026-10-13.md`): with a marginal MOSI connection the headers arrive as `FFFF`, `0000` or bit-shifted words while slower SPI clocks still work.
+
+The Pi side keeps its own counters in `/sys/kernel/debug/dri/1/spifb_stats` (root): mode, protocol, updates, rectangles, bytes, the time to build a frame (`prep_avg_us`, about 1.6 ms for a full 640×480 frame with NEON) and the time spent waiting for the previous transfer.
+
+On the Pi, `nwpi-ctl stat|px X Y|dfu|send LINE|log` uses nwpid's control FIFO (`/run/nwpid.ctl`), which is writable by the `dialout` group, so no sudo is needed. Calculator replies are appended to `/run/nwpid.log`.
+
+---
+
 ### 5. File Transfer (Future)
 
 | Direction | Command | Payload | Description |
@@ -371,6 +414,8 @@ Calculator                    Pi
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-02-27 | Initial protocol design |
+| 1.1 | 2026-10-13 | `DSP` display bridge commands, `SYS:DFU` remote reflash |
+| 1.2 | 2026-10-13 | Multi-rectangle updates, 40 µs spun header gap, `late` and bad-header dump in `DSP:STAT`, bridge re-init and repaint on app entry |
 
 ---
 

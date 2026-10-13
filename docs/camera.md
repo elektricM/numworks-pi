@@ -103,6 +103,15 @@ rpicam-hello --list-cameras
 rpicam-still -o photo.jpg --width 1280 --height 800 --nopreview
 ```
 
+### Camera app (nw-camera)
+
+`nw-camera` (desktop entry "Camera") is a full-screen picamera2 + pygame viewfinder. EXE / Space / OK takes a photo, Up / Down turns the picture 180°, Back / Backspace / Esc quits. Photos go to `~/Pictures/Camera`, cropped and rotated exactly as shown on screen.
+
+- **Orientation**: the module is mounted sideways, and the Pi ISP can only flip, not rotate by 90°. The app has the ISP flip and pygame transpose while blitting, which together make the rotation at no extra cost. The default is 90° clockwise. If the picture is upside down, press Up or Down: the app reconfigures the sensor flip and remembers the choice in `~/.config/nw-camera/rotation` (a `--rotate 0|90|180|270` argument overrides it for one run). It has been reported upside down at 90 once with nothing changed, so the key is the fix rather than a new default.
+- **Tuning**: the standard `ov5647.json`. `--tuning ov5647_noir.json` is there for a module without an IR filter: on a white wall the standard file read red/green 1.8 in the centre and the NoIR one 1.0, but NoIR leaves the corners about 40% darker. Colours looked right to the user with the standard file.
+- **Preview**: uses the 1296x972 2x2-binned mode, so it gets the full field of view with less noise than the 640x480 mode. The sensor is cropped to the screen's aspect after rotation, the frame rate stays at 30 fps (in low light the gain rises rather than the exposure lengthening, so the image gets noisier instead of laggy), and noise reduction is Fast. The preview is drawn at the panel's 320x240 and SDL scales it to the desktop size (`pygame.SCALED`), which cut the app's CPU from about 73% to 23% of a core at 640x480.
+- **Stills**: switch to the full 2592x1944 mode with the same crop and HighQuality noise reduction (about 1920x1440 after rotation).
+
 ### Preview on the calculator display
 
 The rpicam EGL preview renders via XWayland. From SSH:
