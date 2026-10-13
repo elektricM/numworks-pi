@@ -16,7 +16,10 @@
  *   AIS  - AI streaming chunk
  *   AIE  - AI stream end
  *   CAM  - Camera control
- *   SYS  - System control
+ *   SYS  - System control (calc -> Pi "SYS:DFU": calc entered USB DFU,
+ *          the Pi powers off before the flash ends with a reset)
+ *   DSP  - Display bridge: calc "DSP:2" = speaks protocol 2; Pi "DSP:ON",
+ *          "DSP:OFF" (calc answers "DSP:OK"), "DSP:STAT", "DSP:PX:x,y"
  *   OK   - Acknowledgment
  *   ERR  - Error
  */
@@ -38,5 +41,6 @@
 #define CMD_OK    "OK"
 #define CMD_ERR   "ERR"
 #define CMD_MODE  "MODE"
+#define CMD_DSP   "DSP"
 
 #endif /* NWPI_PROTOCOL_H */

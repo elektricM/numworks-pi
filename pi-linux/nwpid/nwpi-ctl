@@ -1,0 +1,40 @@
+#!/bin/sh
+# nwpi-ctl - talk to the calculator through nwpid (dialout group or root)
+#
+#   nwpi-ctl stat          display bridge statistics (protocol 2)
+#   nwpi-ctl px X Y        read 4 pixels back from the LCD at landscape X,Y
+#   nwpi-ctl dfu           put the calculator in USB DFU mode; the Pi powers
+#                          off as soon as the calculator acknowledges
+#   nwpi-ctl send LINE     send a raw protocol line
+#   nwpi-ctl log           calculator replies so far
+set -e
+CTL=/run/nwpid.ctl
+LOG=/run/nwpid.log
+
+# Send $1, print the first new log line starting with $2
+ask() {
+	n=$(cat "$LOG" 2>/dev/null | wc -l)
+	echo "$1" > "$CTL"
+	for _ in $(seq 40); do
+		sleep 0.05
+		r=$(tail -n +$((n + 1)) "$LOG" 2>/dev/null | grep -m1 "^$2" || true)
+		if [ -n "$r" ]; then
+			echo "$r"
+			return 0
+		fi
+	done
+	echo "no reply from the calculator" >&2
+	return 1
+}
+
+[ -p "$CTL" ] || { echo "nwpid is not running" >&2; exit 1; }
+
+case "$1" in
+stat)	ask DSP:STAT DSP:STAT ;;
+px)	ask "DSP:PX:$2,$3" DSP:PX ;;
+dfu)	echo SYS:DFU > "$CTL"
+	echo "Calculator entering DFU; the Pi powers off when it acknowledges." ;;
+send)	shift; echo "$*" > "$CTL" ;;
+log)	cat "$LOG" ;;
+*)	sed -n '3,9s/^# \{0,1\}//p' "$0"; exit 1 ;;
+esac

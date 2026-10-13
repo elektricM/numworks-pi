@@ -151,6 +151,16 @@ void keyboard_init(void)
 	}
 }
 
+void keyboard_nudge(void)
+{
+	if (fd == -1)
+		return;
+	emit(EV_REL, REL_X, 1);
+	emit(EV_SYN, SYN_REPORT, 0);
+	emit(EV_REL, REL_X, -1);
+	emit(EV_SYN, SYN_REPORT, 0);
+}
+
 void keyboard_cleanup(void)
 {
 	if (fd != -1) {
